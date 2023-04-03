@@ -385,7 +385,8 @@ final class Util
      */
     public static function sendForm($url, $params, $target = '', $javascript = '')
     {
-        $timeout = static::$formSubmissionTimeout;
+        $tool_state_life = Tool::$stateLife;
+
         if (empty($javascript)) {
             $javascript = <<< EOD
 function doUnblock() {
@@ -393,15 +394,38 @@ function doUnblock() {
   el.style.display = 'block';
 }
 
+function doNewWinSuccessMessage() {
+   var success_el = document.getElementById('id_newwin_success');
+   success_el.style.display = 'block';
+   var blocked_el = document.getElementById('id_blocked');
+   blocked_el.style.display = 'none';
+}
+
 function doOnLoad() {
   if ((document.forms[0].target === '_blank') && (window.top === window.self)) {
     document.forms[0].target = '';
   }
-  window.setTimeout(doUnblock, {$timeout}000);
-  document.forms[0].submit();
+  if (document.forms[0].target === "_blank") {
+    // Popup blockers may be blocking the _blank window.  If so, detect that and offer a manual form submit instead.
+    var new_window_name = "lti"+Math.random();
+    document.forms[0].target = new_window_name;
+    var new_window_ref = window.open('', new_window_name);
+    var show_successful_launch_msg_timeout_secs = 0;
+    if (new_window_ref) {
+      // If the new window exists, it's a valid submit target.  Submit the form.
+      document.forms[0].submit();
+    } else {
+       // If the new window doesn't exist, the popup was blocked.  Show an unblock message 
+       doUnblock();
+       show_successful_launch_msg_timeout_secs = {$tool_state_life};
+    }
+    setTimeout(doNewWinSuccessMessage, show_successful_launch_msg_timeout_secs * 1000);
+  } else {
+    document.forms[0].submit();
+  }
 }
 
-window.onload=doOnLoad;
+document.addEventListener("DOMContentLoaded", doOnLoad);
 EOD;
         }
         self::logForm($url, $params, 'POST');
@@ -416,8 +440,11 @@ EOD;
 <body>
   <form action="{$url}" method="post" target="{$target}" encType="application/x-www-form-urlencoded">
     <p id="id_blocked" style="display: none; color: red; font-weight: bold;">
-      Your browser may be blocking this request; try clicking the button below.<br><br>
-      <input type="submit" value="Continue" />
+      Your browser's popup blocker may be blocking this tool; try clicking the button below.<br><br>
+      <input type="submit" value="Continue" onClick="doNewWinSuccessMessage()" />
+    </p>
+    <p id="id_newwin_success" style="display: none;">
+      Your tool was loaded in a new window.
     </p>
 
 EOD;
