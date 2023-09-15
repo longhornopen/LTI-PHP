@@ -5,6 +5,7 @@ namespace ceLTIc\LTI;
 use ceLTIc\LTI\DataConnector\DataConnector;
 use ceLTIc\LTI\Service;
 use ceLTIc\LTI\Http\HttpMessage;
+use Illuminate\Support\Facades\Session;
 
 /**
  * Class to represent a platform
@@ -714,12 +715,12 @@ EOD;
         if (!$hasSession) {
             session_start();
         }
-        $_SESSION['ceLTIc_lti_initiated_login'] = array(
+        Session::put('ceLTIc_lti_initiated_login', array(
             'messageUrl' => $url,
             'login_hint' => $loginHint,
             'lti_message_hint' => $ltiMessageHint,
             'params' => $params
-        );
+        ));
         if (!$hasSession) {
             session_write_close();
         }
@@ -736,8 +737,8 @@ EOD;
         if (!$hasSession) {
             session_start();
         }
-        if (isset($_SESSION['ceLTIc_lti_initiated_login'])) {
-            $login = $_SESSION['ceLTIc_lti_initiated_login'];
+        if (Session::has('ceLTIc_lti_initiated_login')) {
+            $login = Session::get('ceLTIc_lti_initiated_login');
             $parameters = Util::getRequestParameters();
             if ($parameters['login_hint'] !== $login['login_hint'] ||
                 (isset($login['lti_message_hint']) && (!isset($parameters['lti_message_hint']) || ($parameters['lti_message_hint'] !== $login['lti_message_hint'])))) {
@@ -747,7 +748,7 @@ EOD;
                 Tool::$defaultTool->messageUrl = $login['messageUrl'];
                 $this->messageParameters = $login['params'];
             }
-            unset($_SESSION['ceLTIc_lti_initiated_login']);
+            Session::forget('ceLTIc_lti_initiated_login');
         }
         if (!$hasSession) {
             session_write_close();

@@ -12,6 +12,7 @@ use ceLTIc\LTI\OAuth;
 use ceLTIc\LTI\ApiHook\ApiHook;
 use ceLTIc\LTI\User;
 use ceLTIc\LTI\Util;
+use Illuminate\Support\Facades\Session;
 
 /**
  * Class to represent an LTI Tool
@@ -758,10 +759,10 @@ class Tool
         if (!$hasSession) {
             session_start();
         }
-        $_SESSION['ceLTIc_lti_authentication_request'] = array(
+        Session::put('ceLTIc_lti_authentication_request', array(
             'state' => $authParameters['state'],
             'nonce' => $authParameters['nonce']
-        );
+        ));
         if (!$hasSession) {
             session_write_close();
         }
@@ -798,8 +799,8 @@ class Tool
                 $this->ok = false;
                 $this->reason = 'Error accessing platform storage';
             }
-        } elseif (isset($_SESSION['ceLTIc_lti_authentication_request'])) {
-            $auth = $_SESSION['ceLTIc_lti_authentication_request'];
+        } elseif (Session::has('ceLTIc_lti_authentication_request')) {
+            $auth = Session::get('ceLTIc_lti_authentication_request');
             if (substr($state, -16) === '.platformStorage') {
                 $state = substr($state, 0, -16);
             }
@@ -807,7 +808,7 @@ class Tool
                 $this->ok = false;
                 $this->reason = 'Invalid state parameter value and/or nonce claim value';
             }
-            unset($_SESSION['ceLTIc_lti_authentication_request']);
+            Session::forget('ceLTIc_lti_authentication_request');
         }
         if (!$hasSession) {
             session_write_close();
