@@ -711,19 +711,12 @@ EOD;
      */
     protected function onInitiateLogin(&$url, &$loginHint, &$ltiMessageHint, $params)
     {
-        $hasSession = !empty(session_id());
-        if (!$hasSession) {
-            session_start();
-        }
         Session::put('ceLTIc_lti_initiated_login', array(
             'messageUrl' => $url,
             'login_hint' => $loginHint,
             'lti_message_hint' => $ltiMessageHint,
             'params' => $params
         ));
-        if (!$hasSession) {
-            session_write_close();
-        }
     }
 
     /**
@@ -733,10 +726,6 @@ EOD;
      */
     protected function onAuthenticate()
     {
-        $hasSession = !empty(session_id());
-        if (!$hasSession) {
-            session_start();
-        }
         if (Session::has('ceLTIc_lti_initiated_login')) {
             $login = Session::get('ceLTIc_lti_initiated_login');
             $parameters = Util::getRequestParameters();
@@ -749,9 +738,6 @@ EOD;
                 $this->messageParameters = $login['params'];
             }
             Session::forget('ceLTIc_lti_initiated_login');
-        }
-        if (!$hasSession) {
-            session_write_close();
         }
     }
 
