@@ -684,17 +684,10 @@ class Tool
      */
     protected function onInitiateLogin(array $requestParameters, array &$authParameters): void
     {
-        $hasSession = !empty(session_id());
-        if (!$hasSession) {
-            session_start();
-        }
         Session::put('ceLTIc_lti_authentication_request', array(
             'state' => $authParameters['state'],
             'nonce' => $authParameters['nonce']
         ));
-        if (!$hasSession) {
-            session_write_close();
-        }
     }
 
     /**
@@ -706,10 +699,6 @@ class Tool
      */
     protected function onAuthenticate(string $state, string $nonce, bool $usePlatformStorage): void
     {
-        $hasSession = !empty(session_id());
-        if (!$hasSession) {
-            session_start();
-        }
         $parts = explode('.', $state);
         if (!isset($this->rawParameters['_storage_check']) && $usePlatformStorage) {  // Check browser storage
             $this->rawParameters['_storage_check'] = '';
@@ -738,9 +727,6 @@ class Tool
                 $this->reason = 'Invalid state parameter value and/or nonce claim value';
             }
             Session::forget('ceLTIc_lti_authentication_request');
-        }
-        if (!$hasSession) {
-            session_write_close();
         }
     }
 
