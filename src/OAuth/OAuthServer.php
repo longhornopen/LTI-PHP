@@ -1,28 +1,62 @@
 <?php
+declare(strict_types=1);
 
 namespace ceLTIc\LTI\OAuth;
 
 /**
- * Class to represent an %OAuth Server
+ * Class to represent an OAuth server
  *
- * @copyright  Andy Smith
+ * @copyright  Andy Smith (http://oauth.googlecode.com/svn/code/php/)
  * @version  2008-08-04
  * @license  https://opensource.org/licenses/MIT The MIT License
  */
 class OAuthServer
 {
 
-    protected $timestamp_threshold = 300; // in seconds, five minutes
-    protected $version = '1.0';             // hi blaine
-    protected $signature_methods = array();
-    protected $data_store;
+    /**
+     * Timestamp threshhold.
+     *
+     * @var int $timestamp_threshold
+     */
+    protected int $timestamp_threshold = 300; // in seconds, five minutes
 
-    function __construct($data_store)
+    /**
+     * Version string.
+     *
+     * @var string $version
+     */
+    protected string $version = '1.0';
+
+    /**
+     * Signature methods.
+     *
+     * @var array $signature_methods
+     */
+    protected array $signature_methods = [];
+
+    /**
+     * Data store.
+     *
+     * @var OAuthDataStore $data_store
+     */
+    protected OAuthDataStore $data_store;
+
+    /**
+     * Class constructor.
+     *
+     * @param OAuthDataStore $data_store  Data store
+     */
+    function __construct(OAuthDataStore $data_store)
     {
         $this->data_store = $data_store;
     }
 
-    public function add_signature_method($signature_method)
+    /**
+     * Add a signature method.
+     *
+     * @param OAuthSignatureMethod $signature_method  Signature method
+     */
+    public function add_signature_method(OAuthSignatureMethod $signature_method): void
     {
         $this->signature_methods[$signature_method->get_name()] = $signature_method;
     }
@@ -30,10 +64,15 @@ class OAuthServer
     // high level functions
 
     /**
-     * process a request_token request
-     * returns the request token on success
+     * Process a request_token request
+     *
+     * Returns the request token on success
+     *
+     * @param OAuthRequest $request  Request
+     *
+     * @return OAuthToken|null
      */
-    public function fetch_request_token(&$request)
+    public function fetch_request_token(OAuthRequest &$request): ?OAuthToken
     {
         $this->get_version($request);
 
@@ -52,17 +91,22 @@ class OAuthServer
     }
 
     /**
-     * process an access_token request
-     * returns the access token on success
+     * Process an access_token request.
+     *
+     * Returns the access token on success
+     *
+     * @param OAuthRequest $request  Request
+     *
+     * @return OAuthToken|null
      */
-    public function fetch_access_token(&$request)
+    public function fetch_access_token(OAuthRequest &$request): ?OAuthToken
     {
         $this->get_version($request);
 
         $consumer = $this->get_consumer($request);
 
         // requires authorized request token
-        $token = $this->get_token($request, $consumer, "request");
+        $token = $this->get_token($request, $consumer, 'request');
 
         $this->check_signature($request, $consumer, $token);
 
@@ -74,42 +118,58 @@ class OAuthServer
     }
 
     /**
-     * verify an api call, checks all the parameters
+     * Verify an API call, checks all the parameters.
+     *
+     * @param OAuthRequest $request  Request
+     *
+     * @return array
      */
-    public function verify_request(&$request)
+    public function verify_request(OAuthRequest &$request): array
     {
         $this->get_version($request);
         $consumer = $this->get_consumer($request);
-        $token = $this->get_token($request, $consumer, "access");
+        $token = $this->get_token($request, $consumer, 'access');
         $this->check_signature($request, $consumer, $token);
 
-        return array($consumer, $token);
+        return [$consumer, $token];
     }
 
     // Internals from here
 
     /**
+     * Get version.
+     *
      * version 1
+     *
+     * @param OAuthRequest $request  Request
+     *
+     * @return string
+     * @throws OAuthException
      */
-    private function get_version(&$request)
+    private function get_version(OAuthRequest &$request): string
     {
-        $version = $request->get_parameter("oauth_version");
+        $version = $request->get_parameter('oauth_version');
         if (!$version) {
             // Service Providers MUST assume the protocol version to be 1.0 if this parameter is not present.
             // Chapter 7.0 ("Accessing Protected Ressources")
             $version = '1.0';
         }
         if ($version !== $this->version) {
-            throw new OAuthException("OAuth version '$version' not supported");
+            throw new OAuthException("OAuth version '{$version}' not supported");
         }
 
         return $version;
     }
 
     /**
-     * figure out the signature with some defaults
+     * Figure out the signature with some defaults
+     *
+     * @param OAuthRequest $request  Rauest
+     *
+     * return OAuthSignatureMethod
+     * @throws OAuthException
      */
-    private function get_signature_method($request)
+    private function get_signature_method(OAuthRequest $request): OAuthSignatureMethod
     {
         $signature_method = $request instanceof OAuthRequest ? $request->get_parameter('oauth_signature_method') : null;
 
@@ -120,10 +180,8 @@ class OAuthServer
         }
 
         if (!in_array($signature_method, array_keys($this->signature_methods))) {
-            throw new OAuthException(
-                "Signature method '$signature_method' not supported " .
-                'try one of the following: ' .
-                implode(', ', array_keys($this->signature_methods))
+            throw new OAuthException("Signature method '{$signature_method}' not supported " .
+                    'try one of the following: ' . implode(', ', array_keys($this->signature_methods))
             );
         }
 
@@ -131,9 +189,14 @@ class OAuthServer
     }
 
     /**
-     * try to find the consumer for the provided request's consumer key
+     * Try to find the consumer for the provided request's consumer key.
+     *
+     * @param OAuthRequest $request  Request
+     *
+     * @return OAuthConsumer
+     * @throws OAuthException
      */
-    private function get_consumer($request)
+    private function get_consumer(OAuthRequest $request): OAuthConsumer
     {
         $consumer_key = $request instanceof OAuthRequest ? $request->get_parameter('oauth_consumer_key') : null;
 
@@ -150,25 +213,36 @@ class OAuthServer
     }
 
     /**
-     * try to find the token for the provided request's token key
+     * Try to find the token for the provided request's token key.
+     *
+     * @param OAuthRequest $request    Request
+     * @param OAuthConsumer $consumer  Consumer
+     * @param string $token_type       Token type
+     *
+     * @return OAuthToken
+     * @throws OAuthException
      */
-    private function get_token($request, $consumer, $token_type = "access")
+    private function get_token(OAuthRequest $request, OAuthConsumer $consumer, string $token_type = 'access'): OAuthToken
     {
         $token_field = $request instanceof OAuthRequest ? $request->get_parameter('oauth_token') : null;
 
         $token = $this->data_store->lookup_token($consumer, $token_type, $token_field);
         if (!$token) {
-            throw new OAuthException("Invalid $token_type token: $token_field");
+            throw new OAuthException("Invalid $token_type token: {$token_field}");
         }
 
         return $token;
     }
 
     /**
-     * all-in-one function to check the signature on a request
-     * should guess the signature method appropriately
+     * All-in-one function to check the signature on a request should guess the signature method appropriately.
+     *
+     * @param OAuthRequest $request    Request
+     * @param OAuthConsumer $consumer  Consumer
+     * @param OAuthToken $token        Token
+     * @throws OAuthException
      */
-    private function check_signature($request, $consumer, $token)
+    private function check_signature(OAuthRequest $request, OAuthConsumer $consumer, OAuthToken $token): void
     {
         // this should probably be in a different method
         $timestamp = $request instanceof OAuthRequest ? $request->get_parameter('oauth_timestamp') : null;
@@ -188,9 +262,12 @@ class OAuthServer
     }
 
     /**
-     * check that the timestamp is new enough
+     * Check that the timestamp is new enough.
+     *
+     * @param string|null $timestamp  Timestamp
+     * @throws OAuthException
      */
-    private function check_timestamp($timestamp)
+    private function check_timestamp(?string $timestamp): void
     {
         if (!$timestamp)
             throw new OAuthException('Missing timestamp parameter. The parameter is required');
@@ -198,14 +275,20 @@ class OAuthServer
         // verify that timestamp is recentish
         $now = time();
         if (abs($now - $timestamp) > $this->timestamp_threshold) {
-            throw new OAuthException("Expired timestamp, yours $timestamp, ours $now");
+            throw new OAuthException("Expired timestamp, yours {$timestamp}, ours {$now}");
         }
     }
 
     /**
-     * check that the nonce is not repeated
+     * Check that the nonce is not repeated.
+     *
+     * @param OAuthConsumer $consumer  Consumer
+     * @param OAuthToken $token        Token
+     * @param string|null $nonce       Nonce value
+     * @param string|null $timestamp   Timestamp
+     * @throws OAuthException
      */
-    private function check_nonce($consumer, $token, $nonce, $timestamp)
+    private function check_nonce(OAuthConsumer $consumer, OAuthToken $token, ?string $nonce, ?string $timestamp): void
     {
         if (!$nonce)
             throw new OAuthException('Missing nonce parameter. The parameter is required');
@@ -213,7 +296,7 @@ class OAuthServer
         // verify that the nonce is uniqueish
         $found = $this->data_store->lookup_nonce($consumer, $token, $nonce, $timestamp);
         if ($found) {
-            throw new OAuthException("Nonce already used: $nonce");
+            throw new OAuthException("Nonce already used: {$nonce}");
         }
     }
 

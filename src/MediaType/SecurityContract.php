@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 namespace ceLTIc\LTI\MediaType;
 
@@ -15,14 +16,28 @@ class SecurityContract
 {
 
     /**
+     * Shared secret.
+     *
+     * @var string|null $shared_secret
+     */
+    public ?string $shared_secret = null;
+
+    /**
+     * Services.
+     *
+     * @var array|null $tool_service
+     */
+    public ?array $tool_service = null;
+
+    /**
      * Class constructor.
      *
-     * @param Tool    $tool  Tool instance
-     * @param string $secret Shared secret
+     * @param Tool $tool      Tool instance
+     * @param string $secret  Shared secret
      */
-    function __construct($tool, $secret)
+    function __construct(Tool $tool, string $secret)
     {
-        $tcContexts = array();
+        $tcContexts = [];
         foreach ($tool->platform->profile->{'@context'} as $context) {
             if (is_object($context)) {
                 $tcContexts = array_merge(get_object_vars($context), $tcContexts);
@@ -30,42 +45,42 @@ class SecurityContract
         }
 
         $this->shared_secret = $secret;
-        $toolServices = array();
+        $toolServices = [];
         foreach ($tool->requiredServices as $requiredService) {
             foreach ($requiredService->formats as $format) {
                 $service = $tool->findService($format, $requiredService->actions);
-                if (($service !== false) && !array_key_exists($service->{'@id'}, $toolServices)) {
-                    $id = $service->{'@id'};
+                if (($service !== false) && !array_key_exists($service->id, $toolServices)) {
+                    $id = $service->id;
                     $parts = explode(':', $id, 2);
                     if (count($parts) > 1) {
                         if (array_key_exists($parts[0], $tcContexts)) {
                             $id = "{$tcContexts[$parts[0]]}{$parts[1]}";
                         }
                     }
-                    $toolService = new \stdClass;
-                    $toolService->{'@type'} = 'RestServiceProfile';
-                    $toolService->service = $id;
-                    $toolService->action = $requiredService->actions;
-                    $toolServices[$service->{'@id'}] = $toolService;
+                    $toolServices[$service->id] = (object) [
+                            '@type' => 'RestServiceProfile',
+                            'service' => $id,
+                            'action' => $requiredService->actions
+                    ];
                 }
             }
         }
         foreach ($tool->optionalServices as $optionalService) {
             foreach ($optionalService->formats as $format) {
                 $service = $tool->findService($format, $optionalService->actions);
-                if (($service !== false) && !array_key_exists($service->{'@id'}, $toolServices)) {
-                    $id = $service->{'@id'};
+                if (($service !== false) && !array_key_exists($service->id, $toolServices)) {
+                    $id = $service->id;
                     $parts = explode(':', $id, 2);
                     if (count($parts) > 1) {
                         if (array_key_exists($parts[0], $tcContexts)) {
                             $id = "{$tcContexts[$parts[0]]}{$parts[1]}";
                         }
                     }
-                    $toolService = new \stdClass;
-                    $toolService->{'@type'} = 'RestServiceProfile';
-                    $toolService->service = $id;
-                    $toolService->action = $optionalService->actions;
-                    $toolServices[$service->{'@id'}] = $toolService;
+                    $toolServices[$service->id] = (object) [
+                            '@type' => 'RestServiceProfile',
+                            'service' => $id,
+                            'action' => $optionalService->actions
+                    ];
                 }
             }
         }

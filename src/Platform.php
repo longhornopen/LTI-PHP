@@ -1,10 +1,14 @@
 <?php
+declare(strict_types=1);
 
 namespace ceLTIc\LTI;
 
 use ceLTIc\LTI\DataConnector\DataConnector;
 use ceLTIc\LTI\Service;
 use ceLTIc\LTI\Http\HttpMessage;
+use ceLTIc\LTI\Enum\IdScope;
+use ceLTIc\LTI\Enum\LogLevel;
+use ceLTIc\LTI\ApiHook\ApiHook;
 use Illuminate\Support\Facades\Session;
 
 /**
@@ -17,161 +21,143 @@ use Illuminate\Support\Facades\Session;
 class Platform
 {
     use System;
+    use ApiHook;
 
     /**
      * List of supported incoming message types.
+     *
+     * @var array $MESSAGE_TYPES
      */
-    public static $MESSAGE_TYPES = array(
+    public static array $MESSAGE_TYPES = [
         'ContentItemSelection',
         'LtiStartAssessment'
-    );
+    ];
 
     /**
      * Name of browser storage frame.
      *
      * @var string|null $browserStorageFrame
      */
-    public static $browserStorageFrame = null;
-
-    /**
-     * Local name of platform.
-     *
-     * @var string|null $name
-     */
-    public $name = null;
+    public static ?string $browserStorageFrame = null;
 
     /**
      * Platform ID.
      *
-     * @var string $platformId
+     * @var string|null $platformId
      */
-    public $platformId = null;
+    public ?string $platformId = null;
 
     /**
      * Client ID.
      *
-     * @var string $clientId
+     * @var string|null $clientId
      */
-    public $clientId = null;
+    public ?string $clientId = null;
 
     /**
      * Deployment ID.
      *
-     * @var string $deploymentId
+     * @var string|null $deploymentId
      */
-    public $deploymentId = null;
+    public ?string $deploymentId = null;
 
     /**
      * Authorization server ID.
      *
-     * @var string $authorizationServerId
+     * @var string|null $authorizationServerId
      */
-    public $authorizationServerId = null;
+    public ?string $authorizationServerId = null;
 
     /**
      * Login authentication URL.
      *
-     * @var string $authenticationUrl
+     * @var string|null $authenticationUrl
      */
-    public $authenticationUrl = null;
+    public ?string $authenticationUrl = null;
 
     /**
      * Access Token service URL.
      *
-     * @var string $accessTokenUrl
+     * @var string|null $accessTokenUrl
      */
-    public $accessTokenUrl = null;
-
-    /**
-     * LTI version (as reported by last platform connection).
-     *
-     * @var string|null $ltiVersion
-     */
-    public $ltiVersion = null;
+    public ?string $accessTokenUrl = null;
 
     /**
      * Name of platform (as reported by last platform connection).
      *
      * @var string|null $consumerName
      */
-    public $consumerName = null;
+    public ?string $consumerName = null;
 
     /**
      * Platform version (as reported by last platform connection).
      *
      * @var string|null $consumerVersion
      */
-    public $consumerVersion = null;
+    public ?string $consumerVersion = null;
 
     /**
      * The platform profile data.
      *
      * @var object|null $profile
      */
-    public $profile = null;
+    public ?object $profile = null;
 
     /**
      * The tool proxy.
      *
-     * @var object|null $toolProxy
+     * @var string|null $toolProxy
      */
-    public $toolProxy = null;
+    public ?string $toolProxy = null;
 
     /**
      * Platform GUID (as reported by first platform connection).
      *
      * @var string|null $consumerGuid
      */
-    public $consumerGuid = null;
+    public ?string $consumerGuid = null;
 
     /**
      * Optional CSS path (as reported by last platform connection).
      *
      * @var string|null $cssPath
      */
-    public $cssPath = null;
+    public ?string $cssPath = null;
 
     /**
      * Whether the platform instance is protected by matching the consumer_guid value in incoming requests.
      *
      * @var bool $protected
      */
-    public $protected = false;
-
-    /**
-     * Default scope to use when generating an Id value for a user.
-     *
-     * @var int $idScope
-     */
-    public $idScope = Tool::ID_SCOPE_ID_ONLY;
+    public bool $protected = false;
 
     /**
      * Default email address (or email domain) to use when no email address is provided for a user.
      *
      * @var string $defaultEmail
      */
-    public $defaultEmail = '';
+    public string $defaultEmail = '';
 
     /**
      * HttpMessage object for last service request.
      *
      * @var HttpMessage|null $lastServiceRequest
      */
-    public $lastServiceRequest = null;
+    public ?HttpMessage $lastServiceRequest = null;
 
     /**
      * Access token to authorize service requests.
      *
      * @var AccessToken|null $accessToken
      */
-    private $accessToken = null;
+    private ?AccessToken $accessToken = null;
 
     /**
      * Class constructor.
      *
-     * @param DataConnector   $dataConnector   A data connector object
+     * @param DataConnector|null $dataConnector  A data connector object
      */
-    public function __construct($dataConnector = null)
+    public function __construct(?DataConnector $dataConnector = null)
     {
         $this->initialize();
         if (empty($dataConnector)) {
@@ -183,7 +169,7 @@ class Platform
     /**
      * Initialise the platform.
      */
-    public function initialize()
+    public function initialize(): void
     {
         $this->id = null;
         $this->key = null;
@@ -203,13 +189,13 @@ class Platform
         $this->consumerGuid = null;
         $this->profile = null;
         $this->toolProxy = null;
-        $this->settings = array();
+        $this->settings = [];
         $this->protected = false;
         $this->enabled = false;
         $this->enableFrom = null;
         $this->enableUntil = null;
         $this->lastAccess = null;
-        $this->idScope = Tool::ID_SCOPE_ID_ONLY;
+        $this->idScope = IdScope::IdOnly;
         $this->defaultEmail = '';
         $this->created = null;
         $this->updated = null;
@@ -220,7 +206,7 @@ class Platform
      *
      * Synonym for initialize().
      */
-    public function initialise()
+    public function initialise(): void
     {
         $this->initialize();
     }
@@ -228,9 +214,9 @@ class Platform
     /**
      * Save the platform to the database.
      *
-     * @return bool    True if the object was successfully saved
+     * @return bool  True if the object was successfully saved
      */
-    public function save()
+    public function save(): bool
     {
         return $this->dataConnector->savePlatform($this);
     }
@@ -238,9 +224,9 @@ class Platform
     /**
      * Delete the platform from the database.
      *
-     * @return bool    True if the object was successfully deleted
+     * @return bool  True if the object was successfully deleted
      */
-    public function delete()
+    public function delete(): bool
     {
         return $this->dataConnector->deletePlatform($this);
     }
@@ -250,9 +236,9 @@ class Platform
      *
      * The ID will be the consumer key if one exists, otherwise a concatenation of the platform/client/deployment IDs
      *
-     * @return string  Platform ID value
+     * @return string|null  Platform ID value
      */
-    public function getId()
+    public function getId(): ?string
     {
         if (!empty($this->key)) {
             $id = $this->key;
@@ -274,9 +260,9 @@ class Platform
     /**
      * Get platform family code (as reported by last platform connection).
      *
-     * @return string Family code
+     * @return string  Family code
      */
-    public function getFamilyCode()
+    public function getFamilyCode(): string
     {
         $familyCode = '';
         if (!empty($this->consumerVersion)) {
@@ -293,9 +279,9 @@ class Platform
     /**
      * Get the data connector.
      *
-     * @return DataConnector|null Data connector object or string
+     * @return DataConnector|null  Data connector object or string
      */
-    public function getDataConnector()
+    public function getDataConnector(): ?DataConnector
     {
         return $this->dataConnector;
     }
@@ -303,9 +289,9 @@ class Platform
     /**
      * Get the authorization access token
      *
-     * @return AccessToken Access token
+     * @return AccessToken|null  Access token
      */
-    public function getAccessToken()
+    public function getAccessToken(): ?AccessToken
     {
         return $this->accessToken;
     }
@@ -315,7 +301,7 @@ class Platform
      *
      * @param AccessToken $accessToken  Access token
      */
-    public function setAccessToken($accessToken)
+    public function setAccessToken(AccessToken $accessToken): void
     {
         $this->accessToken = $accessToken;
     }
@@ -323,9 +309,9 @@ class Platform
     /**
      * Is the platform available to accept launch requests?
      *
-     * @return bool    True if the platform is enabled and within any date constraints
+     * @return bool  True if the platform is enabled and within any date constraints
      */
-    public function getIsAvailable()
+    public function getIsAvailable(): bool
     {
         $ok = $this->enabled;
 
@@ -343,9 +329,9 @@ class Platform
     /**
      * Check if the Tool Settings service is supported.
      *
-     * @return bool    True if this platform supports the Tool Settings service
+     * @return bool  True if this platform supports the Tool Settings service
      */
-    public function hasToolSettingsService()
+    public function hasToolSettingsService(): bool
     {
         $has = !empty($this->getSetting('custom_system_setting_url'));
         if (!$has) {
@@ -357,14 +343,14 @@ class Platform
     /**
      * Get Tool Settings.
      *
-     * @param bool     $simple     True if all the simple media type is to be used (optional, default is true)
+     * @param bool $simple  True if all the simple media type is to be used (optional, default is true)
      *
-     * @return mixed The array of settings if successful, otherwise false
+     * @return array|bool  The array of settings if successful, otherwise false
      */
-    public function getToolSettings($simple = true)
+    public function getToolSettings(bool $simple = true): array|bool
     {
         $ok = false;
-        $settings = array();
+        $settings = [];
         if (!empty($this->getSetting('custom_system_setting_url'))) {
             $url = $this->getSetting('custom_system_setting_url');
             $service = new Service\ToolSettings($this, $url, $simple);
@@ -384,11 +370,11 @@ class Platform
     /**
      * Set Tool Settings.
      *
-     * @param array    $settings   An associative array of settings (optional, default is none)
+     * @param array $settings  An associative array of settings (optional, default is none)
      *
-     * @return bool    True if action was successful, otherwise false
+     * @return bool  True if action was successful, otherwise false
      */
-    public function setToolSettings($settings = array())
+    public function setToolSettings(array $settings = []): bool
     {
         $ok = false;
         if (!empty($this->getSetting('custom_system_setting_url'))) {
@@ -409,9 +395,9 @@ class Platform
     /**
      * Get an array of defined tools
      *
-     * @return array Array of Tool objects
+     * @return array  Array of Tool objects
      */
-    public function getTools()
+    public function getTools(): array
     {
         return $this->dataConnector->getTools();
     }
@@ -419,9 +405,9 @@ class Platform
     /**
      * Check if the Access Token service is supported.
      *
-     * @return bool    True if this platform supports the Access Token service
+     * @return bool  True if this platform supports the Access Token service
      */
-    public function hasAccessTokenService()
+    public function hasAccessTokenService(): bool
     {
         $has = !empty($this->getSetting('custom_oauth2_access_token_url'));
         if (!$has) {
@@ -433,9 +419,9 @@ class Platform
     /**
      * Get the message parameters
      *
-     * @return array The message parameter array
+     * @return array  The message parameter array
      */
-    public function getMessageParameters()
+    public function getMessageParameters(): array
     {
         if ($this->ok && is_null($this->messageParameters)) {
             $this->parseMessage(true, true, false);
@@ -447,11 +433,11 @@ class Platform
     /**
      * Process an incoming request
      */
-    public function handleRequest()
+    public function handleRequest(): void
     {
         $parameters = Util::getRequestParameters();
         if ($this->debugMode) {
-            Util::$logLevel = Util::LOGLEVEL_DEBUG;
+            Util::$logLevel = LogLevel::Debug;
         }
         if ($this->ok) {
             if (!empty($parameters['client_id'])) {  // Authentication request
@@ -483,13 +469,13 @@ class Platform
     /**
      * Load the platform from the database by its consumer key.
      *
-     * @param string          $key             Consumer key
-     * @param DataConnector   $dataConnector   A data connector object
-     * @param bool            $autoEnable      true if the platform is to be enabled automatically (optional, default is false)
+     * @param string|null $key              Consumer key
+     * @param DataConnector $dataConnector  A data connector object
+     * @param bool $autoEnable              True if the platform is to be enabled automatically (optional, default is false)
      *
-     * @return Platform       The platform object
+     * @return Platform  The platform object
      */
-    public static function fromConsumerKey($key = null, $dataConnector = null, $autoEnable = false)
+    public static function fromConsumerKey(?string $key = null, ?DataConnector $dataConnector = null, bool $autoEnable = false): Platform
     {
         $platform = new static($dataConnector);
         $platform->key = $key;
@@ -506,15 +492,16 @@ class Platform
     /**
      * Load the platform from the database by its platform, client and deployment IDs.
      *
-     * @param string          $platformId       The platform ID
-     * @param string          $clientId         The client ID
-     * @param string          $deploymentId     The deployment ID
-     * @param DataConnector   $dataConnector    A data connector object
-     * @param bool            $autoEnable       True if the platform is to be enabled automatically (optional, default is false)
+     * @param string $platformId            The platform ID
+     * @param string|null $clientId         The client ID
+     * @param string|null $deploymentId     The deployment ID
+     * @param DataConnector $dataConnector  A data connector object
+     * @param bool $autoEnable              True if the platform is to be enabled automatically (optional, default is false)
      *
-     * @return Platform       The platform object
+     * @return Platform  The platform object
      */
-    public static function fromPlatformId($platformId, $clientId, $deploymentId, $dataConnector = null, $autoEnable = false)
+    public static function fromPlatformId(string $platformId, ?string $clientId, ?string $deploymentId,
+        DataConnector $dataConnector = null, bool $autoEnable = false): Platform
     {
         $platform = new static($dataConnector);
         $platform->platformId = $platformId;
@@ -532,12 +519,12 @@ class Platform
     /**
      * Load the platform from the database by its record ID.
      *
-     * @param string          $id               The platform record ID
-     * @param DataConnector   $dataConnector    A data connector object
+     * @param int|string $id                The platform record ID
+     * @param DataConnector $dataConnector  A data connector object
      *
-     * @return Platform       The platform object
+     * @return Platform  The platform object
      */
-    public static function fromRecordId($id, $dataConnector)
+    public static function fromRecordId(int|string $id, DataConnector $dataConnector): Platform
     {
         $platform = new static($dataConnector);
         $platform->setRecordId($id);
@@ -549,9 +536,9 @@ class Platform
     /**
      * Get the JavaScript for handling storage postMessages from a tool.
      *
-     * @return string       The JavaScript to handle storage postMessages
+     * @return string  The JavaScript to handle storage postMessages
      */
-    public static function getStorageJS()
+    public static function getStorageJS(): string
     {
         $javascript = <<< EOD
 (function () {
@@ -704,12 +691,12 @@ EOD;
      *
      * Override this method to save the data elsewhere.
      *
-     * @param string   $url               The message URL
-     * @param string   $loginHint         The ID of the user
-     * @param string   $ltiMessageHint    The message hint being sent to the tool
-     * @param array    $params            An associative array of message parameters
+     * @param string $url                  The message URL
+     * @param string $loginHint            The ID of the user
+     * @param string|null $ltiMessageHint  The message hint being sent to the tool
+     * @param array $params                An associative array of message parameters
      */
-    protected function onInitiateLogin(&$url, &$loginHint, &$ltiMessageHint, $params)
+    protected function onInitiateLogin(string &$url, string &$loginHint, ?string &$ltiMessageHint, array $params): void
     {
         Session::put('ceLTIc_lti_initiated_login', array(
             'messageUrl' => $url,
@@ -724,7 +711,7 @@ EOD;
      *
      * Override this method if the data has been saved elsewhere.
      */
-    protected function onAuthenticate()
+    protected function onAuthenticate(): void
     {
         if (Session::has('ceLTIc_lti_initiated_login')) {
             $login = Session::get('ceLTIc_lti_initiated_login');
@@ -744,7 +731,7 @@ EOD;
     /**
      * Process a valid content-item message
      */
-    protected function onContentItem()
+    protected function onContentItem(): void
     {
         $this->reason = 'No onContentItem method found for platform';
         $this->onError();
@@ -753,7 +740,7 @@ EOD;
     /**
      * Process a valid start assessment message
      */
-    protected function onLtiStartAssessment()
+    protected function onLtiStartAssessment(): void
     {
         $this->reason = 'No onLtiStartAssessment method found for platform';
         $this->onError();
@@ -762,7 +749,7 @@ EOD;
     /**
      * Process a response to an invalid message
      */
-    protected function onError()
+    protected function onError(): void
     {
         $this->ok = false;
     }
@@ -776,9 +763,9 @@ EOD;
      *
      * The platform, resource link and user objects will be initialised if the request is valid.
      *
-     * @return bool    True if the request has been successfully validated.
+     * @return bool  True if the request has been successfully validated.
      */
-    private function authenticate()
+    private function authenticate(): bool
     {
         $this->ok = $this->checkMessage();
         if ($this->ok) {
@@ -792,10 +779,12 @@ EOD;
      * Process an authentication request.
      *
      * Generates an auto-submit form to respond to the request.
+     *
+     * @return never
      */
-    private function handleAuthenticationRequest()
+    private function handleAuthenticationRequest(): never
     {
-        $this->messageParameters = array();
+        $this->messageParameters = [];
         $parameters = Util::getRequestParameters();
         $this->ok = isset($parameters['scope']) && isset($parameters['response_type']) &&
             isset($parameters['client_id']) && isset($parameters['redirect_uri']) &&

@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 namespace ceLTIc\LTI;
 
@@ -9,6 +10,10 @@ use ceLTIc\LTI\OAuth;
 use ceLTIc\LTI\Jwt\Jwt;
 use ceLTIc\LTI\Jwt\ClientInterface;
 use ceLTIc\LTI\Tool;
+use ceLTIc\LTI\Profile\ServiceDefinition;
+use ceLTIc\LTI\Enum\LtiVersion;
+use ceLTIc\LTI\Enum\IdScope;
+use ceLTIc\LTI\Util;
 
 /**
  * Class to represent an LTI system
@@ -25,35 +30,49 @@ trait System
      *
      * @var bool $ok
      */
-    public $ok = true;
+    public bool $ok = true;
+
+    /**
+     * LTI version.
+     *
+     * @var LtiVersion|null $ltiVersion
+     */
+    public ?LtiVersion $ltiVersion = null;
+
+    /**
+     * Local name of platform/tool.
+     *
+     * @var string|null $name
+     */
+    public ?string $name = null;
 
     /**
      * Shared secret.
      *
      * @var string|null $secret
      */
-    public $secret = null;
+    public ?string $secret = null;
 
     /**
      * Method used for signing messages.
      *
      * @var string $signatureMethod
      */
-    public $signatureMethod = 'HMAC-SHA1';
+    public string $signatureMethod = 'HMAC-SHA1';
 
     /**
      * Algorithm used for encrypting messages.
      *
-     * @var string $encryptionMethod
+     * @var string|null $encryptionMethod
      */
-    public $encryptionMethod = '';
+    public ?string $encryptionMethod = '';
 
     /**
      * Data connector object.
      *
      * @var DataConnector|null $dataConnector
      */
-    public $dataConnector = null;
+    public ?DataConnector $dataConnector = null;
 
     /**
      * RSA key in PEM or JSON format.
@@ -63,147 +82,161 @@ trait System
      *
      * @var string|null $rsaKey
      */
-    public $rsaKey = null;
+    public ?string $rsaKey = null;
 
     /**
      * Scopes to request when obtaining an access token.
      *
      * @var array  $requiredScopes
      */
-    public $requiredScopes = array();
+    public array $requiredScopes = [];
 
     /**
      * Key ID.
      *
      * @var string|null $kid
      */
-    public $kid = null;
+    public ?string $kid = null;
 
     /**
      * Endpoint for public key.
      *
      * @var string|null $jku
      */
-    public $jku = null;
+    public ?string $jku = null;
 
     /**
      * Error message for last request processed.
      *
      * @var string|null $reason
      */
-    public $reason = null;
+    public ?string $reason = null;
 
     /**
      * Details for error message relating to last request processed.
      *
      * @var array $details
      */
-    public $details = array();
+    public array $details = [];
+
+    /**
+     * Warnings relating to last request processed.
+     *
+     * @var array $warnings
+     */
+    public array $warnings = [];
 
     /**
      * Whether debug level messages are to be reported.
      *
      * @var bool $debugMode
      */
-    public $debugMode = false;
+    public bool $debugMode = false;
 
     /**
      * Whether the system instance is enabled to accept connection requests.
      *
      * @var bool $enabled
      */
-    public $enabled = false;
+    public bool $enabled = false;
 
     /**
      * Timestamp from which the the system instance is enabled to accept connection requests.
      *
      * @var int|null $enableFrom
      */
-    public $enableFrom = null;
+    public ?int $enableFrom = null;
 
     /**
      * Timestamp until which the system instance is enabled to accept connection requests.
      *
      * @var int|null $enableUntil
      */
-    public $enableUntil = null;
+    public ?int $enableUntil = null;
 
     /**
      * Timestamp for date of last connection to this system.
      *
      * @var int|null $lastAccess
      */
-    public $lastAccess = null;
+    public ?int $lastAccess = null;
 
     /**
      * Timestamp for when the object was created.
      *
      * @var int|null $created
      */
-    public $created = null;
+    public ?int $created = null;
 
     /**
      * Timestamp for when the object was last updated.
      *
      * @var int|null $updated
      */
-    public $updated = null;
+    public ?int $updated = null;
 
     /**
-     * JWT object, if any.
+     * Default scope to use when generating an Id value for a user.
      *
-     * @var JWS|null $jwt
+     * @var IdScope|null $idScope
      */
-    protected $jwt = null;
+    public ?IdScope $idScope = IdScope::IdOnly;
+
+    /**
+     * JWT ClientInterface object.
+     *
+     * @var ClientInterface|null $jwt
+     */
+    protected ?ClientInterface $jwt = null;
 
     /**
      * Raw message parameters.
      *
-     * @var array $rawParameters
+     * @var array|null $rawParameters
      */
-    protected $rawParameters = null;
+    protected ?array $rawParameters = null;
 
     /**
      * LTI message parameters.
      *
      * @var array|null $messageParameters
      */
-    protected $messageParameters = null;
+    protected ?array $messageParameters = null;
 
     /**
      * System ID value.
      *
-     * @var int|null $id
+     * @var int|string|null $id
      */
-    private $id = null;
+    private int|string|null $id = null;
 
     /**
      * Consumer key/client ID value.
      *
      * @var string|null $key
      */
-    private $key = null;
+    private ?string $key = null;
 
     /**
      * Setting values (LTI parameters, custom parameters and local parameters).
      *
-     * @var array $settings
+     * @var array|null $settings
      */
-    private $settings = null;
+    private ?array $settings = null;
 
     /**
      * Whether the settings value have changed since last saved.
      *
      * @var bool $settingsChanged
      */
-    private $settingsChanged = false;
+    private bool $settingsChanged = false;
 
     /**
      * Get the system record ID.
      *
-     * @return int|null  System record ID value
+     * @return int|string|null  System record ID value
      */
-    public function getRecordId()
+    public function getRecordId(): int|string|null
     {
         return $this->id;
     }
@@ -211,9 +244,9 @@ trait System
     /**
      * Sets the system record ID.
      *
-     * @param int $id  System record ID value
+     * @param int|string|null $id  System record ID value
      */
-    public function setRecordId($id)
+    public function setRecordId(int|string|null $id): void
     {
         $this->id = $id;
     }
@@ -221,9 +254,9 @@ trait System
     /**
      * Get the consumer key.
      *
-     * @return string  Consumer key value
+     * @return string|null  Consumer key value
      */
-    public function getKey()
+    public function getKey(): ?string
     {
         return $this->key;
     }
@@ -231,9 +264,9 @@ trait System
     /**
      * Set the consumer key.
      *
-     * @param string $key  Consumer key value
+     * @param string|null $key  Consumer key value
      */
-    public function setKey($key)
+    public function setKey(?string $key): void
     {
         $this->key = $key;
     }
@@ -241,12 +274,12 @@ trait System
     /**
      * Get a setting value.
      *
-     * @param string $name    Name of setting
-     * @param string $default Value to return if the setting does not exist (optional, default is an empty string)
+     * @param string $name          Name of setting
+     * @param string|null $default  Value to return if the setting does not exist (optional, default is an empty string)
      *
-     * @return string Setting value
+     * @return string|null  Setting value
      */
-    public function getSetting($name, $default = '')
+    public function getSetting(string $name, ?string $default = ''): ?string
     {
         if (array_key_exists($name, $this->settings)) {
             $value = $this->settings[$name];
@@ -260,10 +293,10 @@ trait System
     /**
      * Set a setting value.
      *
-     * @param string $name  Name of setting
-     * @param string $value Value to set, use an empty value to delete a setting (optional, default is null)
+     * @param string $name              Name of setting
+     * @param string|array|null $value  Value to set, use an empty value to delete a setting (optional, default is null)
      */
-    public function setSetting($name, $value = null)
+    public function setSetting(string $name, string|array|null $value = null): void
     {
         $old_value = $this->getSetting($name);
         if ($value !== $old_value) {
@@ -279,9 +312,9 @@ trait System
     /**
      * Get an array of all setting values.
      *
-     * @return array Associative array of setting values
+     * @return array  Associative array of setting values
      */
-    public function getSettings()
+    public function getSettings(): array
     {
         return $this->settings;
     }
@@ -291,7 +324,7 @@ trait System
      *
      * @param array $settings  Associative array of setting values
      */
-    public function setSettings($settings)
+    public function setSettings(array $settings): void
     {
         $this->settings = $settings;
     }
@@ -299,9 +332,9 @@ trait System
     /**
      * Save setting values.
      *
-     * @return bool    True if the settings were successfully saved
+     * @return bool  True if the settings were successfully saved
      */
-    public function saveSettings()
+    public function saveSettings(): bool
     {
         if ($this->settingsChanged) {
             $ok = $this->save();
@@ -315,9 +348,9 @@ trait System
     /**
      * Check whether a JWT exists
      *
-     * @return bool True if a JWT exists
+     * @return bool  True if a JWT exists
      */
-    public function hasJwt()
+    public function hasJwt(): bool
     {
         return !empty($this->jwt) && $this->jwt->hasJwt();
     }
@@ -325,9 +358,9 @@ trait System
     /**
      * Get the JWT
      *
-     * @return ClientInterface The JWT
+     * @return ClientInterface  The JWT
      */
-    public function getJwt()
+    public function getJwt(): ?ClientInterface
     {
         return $this->jwt;
     }
@@ -335,9 +368,9 @@ trait System
     /**
      * Get the raw POST parameters
      *
-     * @return array The POST parameter array
+     * @return array  The POST parameter array
      */
-    public function getRawParameters()
+    public function getRawParameters(): array
     {
         if (is_null($this->rawParameters)) {
             $this->rawParameters = OAuth\OAuthUtil::parse_parameters(file_get_contents(OAuth\OAuthRequest::$POST_INPUT));
@@ -351,9 +384,9 @@ trait System
      *
      * @param bool $fullyQualified  True if claims should be fully qualified rather than grouped (default is false)
      *
-     * @return array The message claim array
+     * @return array  The message claim array
      */
-    public function getMessageClaims($fullyQualified = false)
+    public function getMessageClaims(bool $fullyQualified = false): array
     {
         $messageClaims = null;
         if (!is_null($this->messageParameters)) {
@@ -368,12 +401,12 @@ trait System
             if (!empty($messageParameters['accept_media_types'])) {
                 $mediaTypes = array_map('trim', explode(',', $messageParameters['accept_media_types']));
                 $mediaTypes = array_filter($mediaTypes);
-                $types = array();
+                $types = [];
                 if (!empty($messageParameters['accept_types'])) {
                     $types = array_map('trim', explode(',', $this->messageParameters['accept_types']));
                     $types = array_filter($types);
                     foreach ($mediaTypes as $mediaType) {
-                        if (strpos($mediaType, 'application/vnd.ims.lti.') === 0) {
+                        if (str_starts_with($mediaType, 'application/vnd.ims.lti.')) {
                             unset($mediaTypes[array_search($mediaType, $mediaTypes)]);
                         }
                     }
@@ -412,7 +445,7 @@ trait System
             if (!empty($messageParameters['accept_presentation_document_targets'])) {
                 $documentTargets = array_map('trim', explode(',', $messageParameters['accept_presentation_document_targets']));
                 $documentTargets = array_filter($documentTargets);
-                $targets = array();
+                $targets = [];
                 foreach ($documentTargets as $documentTarget) {
                     switch ($documentTarget) {
                         case 'frame':
@@ -428,9 +461,9 @@ trait System
                 $targets = array_unique($targets);
                 $messageParameters['accept_presentation_document_targets'] = implode(',', $targets);
             }
-            $messageClaims = array();
+            $messageClaims = [];
             if (!empty($messageParameters['oauth_consumer_key'])) {
-                $messageClaims['aud'] = array($messageParameters['oauth_consumer_key']);
+                $messageClaims['aud'] = [$messageParameters['oauth_consumer_key']];
             }
             foreach ($messageParameters as $key => $value) {
                 $ok = true;
@@ -441,7 +474,7 @@ trait System
                         $mapping = Util::JWT_CLAIM_MAPPING[$key];
                     }
                     if (isset($mapping['isObject']) && $mapping['isObject']) {
-                        $value = json_decode($value);
+                        $value = Util::jsonDecode($value);
                     } elseif (isset($mapping['isArray']) && $mapping['isArray']) {
                         $value = array_map('trim', explode(',', $value));
                         $value = array_filter($value);
@@ -486,7 +519,7 @@ trait System
                     if (empty($value)) {
                         $value = null;
                     } else {
-                        $json = json_decode($value);
+                        $json = Util::jsonDecode($value);
                         if (!is_null($json)) {
                             $value = $json;
                         }
@@ -509,7 +542,7 @@ trait System
                 }
             }
             if (!empty($messageParameters['unmapped_claims'])) {
-                $claims = json_decode($messageParameters['unmapped_claims']);
+                $claims = Util::jsonDecode($messageParameters['unmapped_claims']);
                 foreach ($claims as $claim => $value) {
                     if ($fullyQualified) {
                         $messageClaims = array_merge($messageClaims, self::fullyQualifyClaim($claim, $value));
@@ -537,30 +570,30 @@ trait System
     /**
      * Parse a set of roles to comply with a specified version of LTI.
      *
-     * @param mixed   $roles             Comma-separated list of roles or array of roles
-     * @param string  $ltiVersion        LTI version for roles being returned (optional, default is LTI-1p0)
-     * @param bool    $addPrincipalRole  Add principal role when true (optional, default is false)
+     * @param array|string $roles     Comma-separated list of roles or array of roles
+     * @param LtiVersion $ltiVersion  LTI version for roles being returned (optional, default is LTI-1p0)
+     * @param bool $addPrincipalRole  Add principal role when true (optional, default is false)
      *
-     * @return array Array of roles
+     * @return array  Array of roles
      */
-    public static function parseRoles($roles, $ltiVersion = Util::LTI_VERSION1, $addPrincipalRole = false)
+    public static function parseRoles(array|string $roles, LtiVersion $ltiVersion = LtiVersion::V1, bool $addPrincipalRole = false): array
     {
         if (!is_array($roles)) {
             $roles = array_map('trim', explode(',', $roles));
             $roles = array_filter($roles);
         }
-        $parsedRoles = array();
+        $parsedRoles = [];
         foreach ($roles as $role) {
             $role = trim($role);
             if ((substr($role, 0, 4) !== 'urn:') &&
                 (substr($role, 0, 7) !== 'http://') && (substr($role, 0, 8) !== 'https://')) {
                 switch ($ltiVersion) {
-                    case Util::LTI_VERSION1:
+                    case LtiVersion::V1:
                         $role = str_replace('#', '/', $role);
                         $role = "urn:lti:role:ims/lis/{$role}";
                         break;
-                    case Util::LTI_VERSION2:
-                    case Util::LTI_VERSION1P3:
+                    case LtiVersion::V2:
+                    case LtiVersion::V1P3:
                         $pos = strrpos($role, '#');
                         if ($pos === false) {
                             $sep = '#';
@@ -571,15 +604,16 @@ trait System
                         break;
                 }
             }
-            $systemRoles = array(
+            $systemRoles = [
                 'AccountAdmin',
                 'Administrator',
                 'Creator',
                 'None',
                 'SysAdmin',
                 'SysSupport',
-                'User');
-            $institutionRoles = array(
+                'User'
+            ];
+            $institutionRoles = [
 //            'Administrator',  // System Administrator role takes precedence
                 'Alumni',
                 'Faculty',
@@ -594,16 +628,16 @@ trait System
                 'ProspectiveStudent',
                 'Staff',
                 'Student'
-            );
+            ];
             switch ($ltiVersion) {
-                case Util::LTI_VERSION1:
+                case LtiVersion::V1:
                     if (in_array(substr($role, 0, 53),
-                            array('http://purl.imsglobal.org/vocab/lis/v2/system/person#',
-                                'http://purl.imsglobal.org/vocab/lis/v2/system/person/'))) {
+                            ['http://purl.imsglobal.org/vocab/lis/v2/system/person#',
+                                'http://purl.imsglobal.org/vocab/lis/v2/system/person/'])) {
                         $role = 'urn:lti:sysrole:ims/lis/' . substr($role, 53);
                     } elseif (in_array(substr($role, 0, 58),
-                            array('http://purl.imsglobal.org/vocab/lis/v2/institution/person#',
-                                'http://purl.imsglobal.org/vocab/lis/v2/institution/person/'))) {
+                            ['http://purl.imsglobal.org/vocab/lis/v2/institution/person#',
+                                'http://purl.imsglobal.org/vocab/lis/v2/institution/person/'])) {
                         $role = 'urn:lti:instrole:ims/lis/' . substr($role, 58);
                     } elseif (substr($role, 0, 50) === 'http://purl.imsglobal.org/vocab/lis/v2/membership#') {
                         $principalRole = substr($role, 50);
@@ -633,8 +667,8 @@ trait System
                             $role = 'urn:lti:role:ims/lis/' . substr($role, 50);
                         }
                     } elseif (in_array(substr($role, 0, 46),
-                            array('http://purl.imsglobal.org/vocab/lis/v2/person#',
-                                'http://purl.imsglobal.org/vocab/lis/v2/person/'))) {
+                            ['http://purl.imsglobal.org/vocab/lis/v2/person#',
+                                'http://purl.imsglobal.org/vocab/lis/v2/person/'])) {
                         if (in_array(substr($role, 46), $systemRoles)) {
                             $role = 'urn:lti:sysrole:ims/lis/' . substr($role, 46);
                         } elseif (in_array(substr($role, 46), $institutionRoles)) {
@@ -653,7 +687,7 @@ trait System
                     }
                     $role = str_replace('#', '/', $role);
                     break;
-                case Util::LTI_VERSION2:
+                case LtiVersion::V2:
                     $prefix = '';
                     if (substr($role, 0, 24) === 'urn:lti:sysrole:ims/lis/') {
                         $prefix = 'http://purl.imsglobal.org/vocab/lis/v2/person';
@@ -680,13 +714,13 @@ trait System
                             $role = substr($role, 21);
                         }
                     } elseif (in_array(substr($role, 0, 53),
-                            array('http://purl.imsglobal.org/vocab/lis/v2/system/person#',
-                                'http://purl.imsglobal.org/vocab/lis/v2/system/person/'))) {
+                            ['http://purl.imsglobal.org/vocab/lis/v2/system/person#',
+                                'http://purl.imsglobal.org/vocab/lis/v2/system/person/'])) {
                         $prefix = 'http://purl.imsglobal.org/vocab/lis/v2/person';
                         $role = substr($role, 53);
                     } elseif (in_array(substr($role, 0, 58),
-                            array('http://purl.imsglobal.org/vocab/lis/v2/institution/person#',
-                                'http://purl.imsglobal.org/vocab/lis/v2/institution/person/'))) {
+                            ['http://purl.imsglobal.org/vocab/lis/v2/institution/person#',
+                                'http://purl.imsglobal.org/vocab/lis/v2/institution/person/'])) {
                         $prefix = 'http://purl.imsglobal.org/vocab/lis/v2/person';
                         $role = substr($role, 58);
                     } elseif (substr($role, 0, 50) === 'http://purl.imsglobal.org/vocab/lis/v2/membership#') {
@@ -733,7 +767,7 @@ trait System
                         $role = "{$prefix}{$role}";
                     }
                     break;
-                case Util::LTI_VERSION1P3:
+                case LtiVersion::V1P3:
                     $prefix = '';
                     if (substr($role, 0, 24) === 'urn:lti:sysrole:ims/lis/') {
                         $prefix = 'http://purl.imsglobal.org/vocab/lis/v2/system/person';
@@ -829,18 +863,18 @@ trait System
     /**
      * Add the signature to an LTI message.
      *
-     * @param string  $url         URL for message request
-     * @param string  $type        LTI message type
-     * @param string  $version     LTI version
-     * @param array   $params      Message parameters
+     * @param string $url               URL for message request
+     * @param string $type              LTI message type
+     * @param string $ltiVersionString  LTI version
+     * @param array $params             Message parameters
      *
      * @return array|string  Array of signed message parameters or request headers
      */
-    public function signParameters($url, $type, $version, $params)
+    public function signParameters(string $url, string $type, string $ltiVersionString, array $params): array|string
     {
         if (!empty($url)) {
 // Add standard parameters
-            $params['lti_version'] = $version;
+            $params['lti_version'] = $ltiVersionString;
             $params['lti_message_type'] = $type;
 // Add signature
             $params = $this->addSignature($url, $params, 'POST', 'application/x-www-form-urlencoded');
@@ -855,18 +889,19 @@ trait System
      * If the message is being sent from a platform using LTI 1.3, then the parameters and URL will be saved and replaced with an
      * initiate login request.
      *
-     * @param string  $url             URL for message request
-     * @param string  $type            LTI message type
-     * @param string  $version         LTI version
-     * @param array   $params          Message parameters
-     * @param string  $loginHint       ID of user (optional)
-     * @param string  $ltiMessageHint  LTI message hint (optional, use null for none)
+     * @param string $url                  URL for message request
+     * @param string $type                 LTI message type
+     * @param string $ltiVersionString     LTI version
+     * @param array $params                Message parameters
+     * @param string|null $loginHint       ID of user (optional)
+     * @param string|null $ltiMessageHint  LTI message hint (optional, use null for none)
      *
      * @return array|string  Array of signed message parameters or request headers
      */
-    public function signMessage(&$url, $type, $version, $params, $loginHint = null, $ltiMessageHint = null)
+    public function signMessage(string &$url, string $type, string $ltiVersionString, array $params, ?string $loginHint = null,
+        ?string $ltiMessageHint = null): array|string
     {
-        if (($this instanceof Platform) && ($this->ltiVersion === Util::LTI_VERSION1P3)) {
+        if (($this instanceof Platform) && ($this->ltiVersion === LtiVersion::V1P3)) {
             if (!isset($loginHint) || (strlen($loginHint) <= 0)) {
                 if (isset($params['user_id']) && (strlen($params['user_id']) > 0)) {
                     $loginHint = $params['user_id'];
@@ -875,15 +910,15 @@ trait System
                 }
             }
 // Add standard parameters
-            $params['lti_version'] = $version;
+            $params['lti_version'] = $ltiVersionString;
             $params['lti_message_type'] = $type;
             $this->onInitiateLogin($url, $loginHint, $ltiMessageHint, $params);
 
-            $params = array(
+            $params = [
                 'iss' => $this->platformId,
                 'target_link_uri' => $url,
                 'login_hint' => $loginHint
-            );
+            ];
             if (!is_null($ltiMessageHint)) {
                 $params['lti_message_hint'] = $ltiMessageHint;
             }
@@ -905,7 +940,7 @@ trait System
                 $url .= "{$sep}lti_storage_target=" . static::$browserStorageFrame;
             }
         } else {
-            $params = $this->signParameters($url, $type, $version, $params);
+            $params = $this->signParameters($url, $type, $ltiVersionString, $params);
         }
 
         return $params;
@@ -914,18 +949,20 @@ trait System
     /**
      * Generate a web page containing an auto-submitted form of LTI message parameters.
      *
-     * @param string $url              URL to which the form should be submitted
-     * @param string $type             LTI message type
-     * @param array  $messageParams    Array of form parameters
-     * @param string $target           Name of target (optional)
-     * @param string $userId           ID of user (optional)
-     * @param string $hint             LTI message hint (optional, use null for none)
+     * @param string $url           URL to which the form should be submitted
+     * @param string $type          LTI message type
+     * @param array $messageParams  Array of form parameters
+     * @param string $target        Name of target (optional)
+     * @param string|null $userId   ID of user (optional)
+     * @param string|null $hint     LTI message hint (optional, use null for none)
      *
      * @return string
      */
-    public function sendMessage($url, $type, $messageParams, $target = '', $userId = null, $hint = null)
+    public function sendMessage(string $url, string $type, array $messageParams, string $target = '', ?string $userId = null,
+        ?string $hint = null): string
     {
-        $sendParams = $this->signMessage($url, $type, $this->ltiVersion, $messageParams, $userId, $hint);
+        $sendParams = $this->signMessage($url, $type, $this->ltiVersion ? $this->ltiVersion->value : '', $messageParams, $userId,
+            $hint);
         $html = Util::sendForm($url, $sendParams, $target);
 
         return $html;
@@ -934,14 +971,14 @@ trait System
     /**
      * Generates the headers for an LTI service request.
      *
-     * @param string  $url         URL for message request
-     * @param string  $method      HTTP method
-     * @param string  $type        Media type
-     * @param string  $data        Data being passed in request body (optional)
+     * @param string $url              URL for message request
+     * @param string $method           HTTP method
+     * @param string $type             Media type
+     * @param array|string|null $data  Data being passed in request body (optional)
      *
-     * @return string Headers to include with service request
+     * @return array|string  Headers to include with service request
      */
-    public function signServiceRequest($url, $method, $type, $data = null)
+    public function signServiceRequest(string $url, string $method, string $type, array|string|null $data = null): array|string
     {
         $header = '';
         if (!empty($url)) {
@@ -954,14 +991,14 @@ trait System
     /**
      * Perform a service request
      *
-     * @param object $service  Service object to be executed
-     * @param string $method   HTTP action
-     * @param string $format   Media type
-     * @param mixed  $data     Array of parameters or body string
+     * @param ServiceDefinition $service  Service object to be executed
+     * @param string $method              HTTP action
+     * @param string $format              Media type
+     * @param array|string $data          Array of parameters or body string
      *
-     * @return HttpMessage HTTP object containing request and response details
+     * @return HttpMessage  HTTP object containing request and response details
      */
-    public function doServiceRequest($service, $method, $format, $data)
+    public function doServiceRequest(ServiceDefinition $service, string $method, string $format, array|string $data): HttpMessage
     {
         $header = $this->addSignature($service->endpoint, $data, $method, $format);
 
@@ -969,7 +1006,7 @@ trait System
         $http = new HttpMessage($service->endpoint, $method, $data, $header);
 // Parse JSON response
         if ($http->send() && !empty($http->response)) {
-            $http->responseJson = json_decode($http->response);
+            $http->responseJson = Util::jsonDecode($http->response);
             $http->ok = !is_null($http->responseJson);
         }
 
@@ -981,7 +1018,7 @@ trait System
      *
      * @return bool  True if OAuth 1 security model should be used
      */
-    public function useOAuth1()
+    public function useOAuth1(): bool
     {
         return empty($this->signatureMethod) || (substr($this->signatureMethod, 0, 2) !== 'RS');
     }
@@ -989,17 +1026,18 @@ trait System
     /**
      * Add the signature to an array of message parameters or to a header string.
      *
-     * @param string $endpoint          URL to which message is being sent
-     * @param mixed $data               Data to be passed
-     * @param string $method            HTTP method
-     * @param string|null $type         Content type of data being passed
-     * @param string|null $nonce        Nonce value for JWT
-     * @param string|null $hash         OAuth body hash value
-     * @param int|null $timestamp       Timestamp
+     * @param string $endpoint         URL to which message is being sent
+     * @param array|string|null $data  Data to be passed
+     * @param string $method           HTTP method
+     * @param string|null $type        Content type of data being passed
+     * @param string|null $nonce       Nonce value for JWT
+     * @param string|null $hash        OAuth body hash value
+     * @param int|null $timestamp      Timestamp
      *
-     * @return mixed Array of signed message parameters or header string
+     * @return array|string  Array of signed message parameters or header string
      */
-    public function addSignature($endpoint, $data, $method = 'POST', $type = null, $nonce = '', $hash = null, $timestamp = null)
+    public function addSignature(string $endpoint, array|string|null $data, string $method = 'POST', ?string $type = null,
+        ?string $nonce = '', ?string $hash = null, ?int $timestamp = null): array|string
     {
         if ($this->useOAuth1()) {
             return $this->addOAuth1Signature($endpoint, $data, $method, $type, $hash, $timestamp);
@@ -1013,13 +1051,15 @@ trait System
      *
      * @return bool  True if it is a valid LTI message
      */
-    public function checkMessage()
+    public function checkMessage(): bool
     {
         $ok = $_SERVER['REQUEST_METHOD'] === 'POST';
         if (!$ok) {
             $this->reason = 'LTI messages must use HTTP POST';
         } elseif (!empty($this->jwt) && !empty($this->jwt->hasJwt())) {
             $ok = false;
+            $context = $this->jwt->getClaim('https://purl.imsglobal.org/spec/lti/claim/context');
+            $resourceLink = $this->jwt->getClaim('https://purl.imsglobal.org/spec/lti/claim/resource_link');
             if (is_null($this->messageParameters['oauth_consumer_key']) || (strlen($this->messageParameters['oauth_consumer_key']) <= 0)) {
                 $this->reason = 'Missing iss claim';
             } elseif (empty($this->jwt->getClaim('iat', ''))) {
@@ -1030,6 +1070,10 @@ trait System
                 $this->reason = 'iat claim must not have a value greater than exp claim';
             } elseif (empty($this->jwt->getClaim('nonce', ''))) {
                 $this->reason = 'Missing nonce claim';
+            } elseif (!empty($context) && property_exists($context, 'id') && (empty($context->id) || !is_string($context->id))) {
+                $this->reason = 'Invalid value for id property in https://purl.imsglobal.org/spec/lti/claim/context claim';
+            } elseif (!empty($resourceLink) && property_exists($resourceLink, 'id') && (empty($resourceLink->id) || !is_string($resourceLink->id))) {
+                $this->reason = 'Invalid value for id property in https://purl.imsglobal.org/spec/lti/claim/resource_link claim';
             } else {
                 $ok = true;
             }
@@ -1049,8 +1093,11 @@ trait System
             }
         }
         if ($ok) {
-            $ok = isset($this->messageParameters['lti_version']) && in_array($this->messageParameters['lti_version'],
-                    Util::$LTI_VERSIONS);
+            $ok = isset($this->messageParameters['lti_version']);
+            if ($ok) {
+                $this->ltiVersion = LtiVersion::tryFrom($this->messageParameters['lti_version']);
+                $ok = !empty($this->ltiVersion);
+            }
             if (!$ok) {
                 $this->reason = 'Invalid or missing lti_version parameter.';
             }
@@ -1064,7 +1111,7 @@ trait System
      *
      * @return bool  True if the signature is valid
      */
-    public function verifySignature()
+    public function verifySignature(): bool
     {
         $ok = false;
         $key = $this->key;
@@ -1114,7 +1161,7 @@ trait System
             } catch (\Exception $e) {
                 if (empty($this->reason)) {
                     $oauthConsumer = new OAuth\OAuthConsumer($key, $secret);
-                    $signature = $request->build_signature($method, $oauthConsumer, false);
+                    $signature = $request->build_signature($method, $oauthConsumer, null);
                     if ($this->debugMode) {
                         $this->reason = $e->getMessage();
                     }
@@ -1156,11 +1203,11 @@ trait System
     /**
      * Parse the message.
      *
-     * @param bool    $strictMode      True if full compliance with the LTI specification is required
-     * @param bool    $disableCookieCheck  True if no cookie check should be made
-     * @param bool    $generateWarnings    True if warning messages should be generated
+     * @param bool $strictMode          True if full compliance with the LTI specification is required
+     * @param bool $disableCookieCheck  True if no cookie check should be made
+     * @param bool $generateWarnings    True if warning messages should be generated
      */
-    private function parseMessage($strictMode, $disableCookieCheck, $generateWarnings)
+    private function parseMessage(bool $strictMode, bool $disableCookieCheck, bool $generateWarnings): void
     {
         if (is_null($this->messageParameters)) {
             $this->getRawParameters();
@@ -1265,7 +1312,7 @@ trait System
                                         }
                                     }
                                 }
-                                $this->messageParameters = array();
+                                $this->messageParameters = [];
                                 if ($this->ok) {
                                     $this->messageParameters['oauth_consumer_key'] = $aud;
                                     $this->messageParameters['oauth_signature_method'] = $this->jwt->getHeader('alg');
@@ -1324,13 +1371,13 @@ trait System
     /**
      * Parse the claims
      *
-     * @param bool    $strictMode      True if full compliance with the LTI specification is required
-     * @param bool    $generateWarnings    True if warning messages should be generated
+     * @param bool $strictMode        True if full compliance with the LTI specification is required
+     * @param bool $generateWarnings  True if warning messages should be generated
      */
-    private function parseClaims($strictMode, $generateWarnings)
+    private function parseClaims(bool $strictMode, bool $generateWarnings): void
     {
         $payload = Util::cloneObject($this->jwt->getPayload());
-        $errors = array();
+        $errors = [];
         foreach (Util::JWT_CLAIM_MAPPING as $key => $mapping) {
             $claim = Util::JWT_CLAIM_PREFIX;
             if (!empty($mapping['suffix'])) {
@@ -1394,7 +1441,7 @@ trait System
         if (!empty($this->messageParameters['accept_types'])) {
             $types = array_map('trim', explode(',', $this->messageParameters['accept_types']));
             $types = array_filter($types);
-            $mediaTypes = array();
+            $mediaTypes = [];
             if (!empty($this->messageParameters['accept_media_types'])) {
                 $mediaTypes = array_map('trim', explode(',', $this->messageParameters['accept_media_types']));
                 $mediaTypes = array_filter($mediaTypes);
@@ -1490,7 +1537,7 @@ trait System
      *
      * This function may set the redirect_url and output properties.
      */
-    private function doCallback()
+    private function doCallback(): void
     {
         if (array_key_exists($this->messageParameters['lti_message_type'], Util::$METHOD_NAMES)) {
             $callback = Util::$METHOD_NAMES[$this->messageParameters['lti_message_type']];
@@ -1508,18 +1555,19 @@ trait System
     /**
      * Add the OAuth 1 signature to an array of message parameters or to a header string.
      *
-     * @param string $endpoint          URL to which message is being sent
-     * @param mixed $data               Data to be passed
-     * @param string $method            HTTP method
-     * @param string|null $type         Content type of data being passed
-     * @param string|null $hash         OAuth body hash value
-     * @param int|null $timestamp       Timestamp
+     * @param string $endpoint         URL to which message is being sent
+     * @param array|string|null $data  Data to be passed
+     * @param string $method           HTTP method
+     * @param string|null $type        Content type of data being passed
+     * @param string|null $hash        OAuth body hash value
+     * @param int|null $timestamp      Timestamp
      *
-     * @return string[]|string Array of signed message parameters or header string
+     * @return string[]|string  Array of signed message parameters or header string
      */
-    private function addOAuth1Signature($endpoint, $data, $method, $type, $hash, $timestamp)
+    private function addOAuth1Signature(string $endpoint, array|string|null $data, string $method, ?string $type, ?string $hash,
+        ?int $timestamp): array|string
     {
-        $params = array();
+        $params = [];
         if (is_array($data)) {
             $params = $data;
             $params['oauth_callback'] = 'about:blank';
@@ -1531,48 +1579,31 @@ trait System
 
         if (!is_array($data)) {
             if (empty($hash)) {  // Calculate body hash
-                switch ($this->signatureMethod) {
-                    case 'HMAC-SHA224':
-                        $hash = base64_encode(hash('sha224', $data, true));
-                        break;
-                    case 'HMAC-SHA256':
-                        $hash = base64_encode(hash('sha256', $data, true));
-                        break;
-                    case 'HMAC-SHA384':
-                        $hash = base64_encode(hash('sha384', $data, true));
-                        break;
-                    case 'HMAC-SHA512':
-                        $hash = base64_encode(hash('sha512', $data, true));
-                        break;
-                    default:
-                        $hash = base64_encode(sha1($data, true));
-                        break;
+                if (is_null($data)) {
+                    $data = '';
                 }
+                $hash = match ($this->signatureMethod) {
+                    'HMAC-SHA224' => base64_encode(hash('sha224', $data, true)),
+                    'HMAC-SHA256' => base64_encode(hash('sha256', $data, true)),
+                    'HMAC-SHA384' => base64_encode(hash('sha384', $data, true)),
+                    'HMAC-SHA512' => base64_encode(hash('sha512', $data, true)),
+                    default => base64_encode(sha1($data, true))
+                };
             }
             $params['oauth_body_hash'] = $hash;
         }
         if (!empty($timestamp)) {
-            $params['oauth_timestamp'] = $timestamp;
+            $params['oauth_timestamp'] = strval($timestamp);
         }
 
 // Add OAuth signature
-        switch ($this->signatureMethod) {
-            case 'HMAC-SHA224':
-                $hmacMethod = new OAuth\OAuthSignatureMethod_HMAC_SHA224();
-                break;
-            case 'HMAC-SHA256':
-                $hmacMethod = new OAuth\OAuthSignatureMethod_HMAC_SHA256();
-                break;
-            case 'HMAC-SHA384':
-                $hmacMethod = new OAuth\OAuthSignatureMethod_HMAC_SHA384();
-                break;
-            case 'HMAC-SHA512':
-                $hmacMethod = new OAuth\OAuthSignatureMethod_HMAC_SHA512();
-                break;
-            default:
-                $hmacMethod = new OAuth\OAuthSignatureMethod_HMAC_SHA1();
-                break;
-        }
+        $hmacMethod = match ($this->signatureMethod) {
+            'HMAC-SHA224' => new OAuth\OAuthSignatureMethod_HMAC_SHA224(),
+            'HMAC-SHA256' => new OAuth\OAuthSignatureMethod_HMAC_SHA256(),
+            'HMAC-SHA384' => new OAuth\OAuthSignatureMethod_HMAC_SHA384(),
+            'HMAC-SHA512' => new OAuth\OAuthSignatureMethod_HMAC_SHA512(),
+            default => new OAuth\OAuthSignatureMethod_HMAC_SHA1()
+        };
         $key = $this->key;
         $secret = $this->secret;
         if (empty($key)) {
@@ -1608,11 +1639,11 @@ trait System
                             unset($params[$key]);
                         }
                     } else {
-                        $params[$key] = array_diff($params[$key], array($value));
+                        $params[$key] = array_diff($params[$key], [$value]);
                     }
                 } else {
                     foreach ($value as $element) {
-                        $params[$key] = array_diff($params[$key], array($value));
+                        $params[$key] = array_diff($params[$key], [$value]);
                     }
                 }
             }
@@ -1633,16 +1664,17 @@ trait System
     /**
      * Add the JWT signature to an array of message parameters or to a header string.
      *
-     * @param string $endpoint          URL to which message is being sent
-     * @param mixed $data               Data to be passed
-     * @param string $method            HTTP method
-     * @param string|null $type         Content type of data being passed
-     * @param string|null $nonce        Nonce value for JWT
-     * @param int|null $timestamp       Timestamp
+     * @param string $endpoint         URL to which message is being sent
+     * @param array|string|null $data  Data to be passed
+     * @param string $method           HTTP method
+     * @param string|null $type        Content type of data being passed
+     * @param string|null $nonce       Nonce value for JWT
+     * @param int|null $timestamp      Timestamp
      *
-     * @return string[]|string Array of signed message parameters or header string
+     * @return string[]|string  Array of signed message parameters or header string
      */
-    private function addJWTSignature($endpoint, $data, $method, $type, $nonce, $timestamp)
+    private function addJWTSignature(string $endpoint, array|string|null $data, string $method, ?string $type, ?string $nonce,
+        ?int $timestamp): array|string
     {
         $ok = false;
         if (is_array($data)) {
@@ -1662,7 +1694,7 @@ trait System
                         $publicKey = Tool::$defaultTool->rsaKey;
                     }
                     $payload['iss'] = $this->platformId;
-                    $payload['aud'] = array($this->clientId);
+                    $payload['aud'] = [$this->clientId];
                     $payload['azp'] = $this->clientId;
                     $payload[Util::JWT_CLAIM_PREFIX . '/claim/deployment_id'] = $this->deploymentId;
                     $payload[Util::JWT_CLAIM_PREFIX . '/claim/target_link_uri'] = $endpoint;
@@ -1671,7 +1703,7 @@ trait System
                     if (!empty($this->platform)) {
                         $publicKey = $this->platform->rsaKey;
                         $payload['iss'] = $this->platform->clientId;
-                        $payload['aud'] = array($this->platform->platformId);
+                        $payload['aud'] = [$this->platform->platformId];
                         $payload['azp'] = $this->platform->platformId;
                         $payload[Util::JWT_CLAIM_PREFIX . '/claim/deployment_id'] = $this->platform->deploymentId;
                     }
@@ -1704,7 +1736,7 @@ trait System
                 if (empty($authorizationId)) {
                     $authorizationId = $endpoint;
                 }
-                $payload['aud'] = array($authorizationId);
+                $payload['aud'] = [$authorizationId];
                 $payload['jti'] = $nonce;
                 $params = $data;
                 $paramName = 'client_assertion';
@@ -1721,7 +1753,7 @@ trait System
                 $params[$paramName] = $jwt::sign($payload, $this->signatureMethod, $privateKey, $kid, $jku, $this->encryptionMethod,
                         $publicKey);
             } catch (\Exception $e) {
-                $params = array();
+                $params = [];
             }
 
             return $params;
@@ -1761,14 +1793,14 @@ trait System
     /**
      * Expand a claim into an array of individual fully-qualified claims.
      *
-     * @param string $claim          Name of claim
-     * @param string $value          Value of claim
+     * @param string $claim  Name of claim
+     * @param mixed $value   Value of claim
      *
-     * @return string[] Array of individual claims and values
+     * @return array  Array of individual claims and values
      */
-    private static function fullyQualifyClaim($claim, $value)
+    private static function fullyQualifyClaim(string $claim, mixed $value): array
     {
-        $claims = array();
+        $claims = [];
         $empty = true;
         if (is_object($value)) {
             foreach ($value as $c => $v) {

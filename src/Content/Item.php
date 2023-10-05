@@ -3,6 +3,7 @@
 namespace ceLTIc\LTI\Content;
 
 use ceLTIc\LTI\Util;
+use ceLTIc\LTI\Enum\LtiVersion;
 
 /**
  * Class to represent a content-item object
@@ -17,133 +18,133 @@ class Item
     /**
      * Type for link content-item.
      */
-    const TYPE_LINK = 'link';
+    public const TYPE_LINK = 'link';
 
     /**
      * Type for LTI link content-item.
      */
-    const TYPE_LTI_LINK = 'ltiResourceLink';
+    public const TYPE_LTI_LINK = 'ltiResourceLink';
 
     /**
      * Type for LTI assignment content-item.
      */
-    const TYPE_LTI_ASSIGNMENT = 'ltiAssignment';
+    public const TYPE_LTI_ASSIGNMENT = 'ltiAssignment';
 
     /**
      * Type for file content-item.
      */
-    const TYPE_FILE = 'file';
+    public const TYPE_FILE = 'file';
 
     /**
      * Type for HTML content-item.
      */
-    const TYPE_HTML = 'html';
+    public const TYPE_HTML = 'html';
 
     /**
      * Type for image content-item.
      */
-    const TYPE_IMAGE = 'image';
+    public const TYPE_IMAGE = 'image';
 
     /**
      * Media type for LTI launch links.
      */
-    const LTI_LINK_MEDIA_TYPE = 'application/vnd.ims.lti.v1.ltilink';
+    public const LTI_LINK_MEDIA_TYPE = 'application/vnd.ims.lti.v1.ltilink';
 
     /**
      * Media type for LTI assignment links.
      */
-    const LTI_ASSIGNMENT_MEDIA_TYPE = 'application/vnd.ims.lti.v1.ltiassignment';
+    public const LTI_ASSIGNMENT_MEDIA_TYPE = 'application/vnd.ims.lti.v1.ltiassignment';
 
     /**
      * Type of content-item.
      *
      * @var string|null $type
      */
-    private $type = null;
+    private ?string $type = null;
 
     /**
      * ID of content-item.
      *
      * @var string|null $id
      */
-    private $id = null;
+    private ?string $id = null;
 
     /**
      * Array of placement objects for content-item.
      *
      * @var array $placements
      */
-    private $placements = array();
+    private array $placements = [];
 
     /**
      * URL of content-item.
      *
      * @var string|null $url
      */
-    private $url = null;
+    private ?string $url = null;
 
     /**
      * Media type of content-item.
      *
      * @var string|null $mediaType
      */
-    private $mediaType = null;
+    private ?string $mediaType = null;
 
     /**
      * Title of content-item.
      *
      * @var string|null $title
      */
-    private $title = null;
+    private ?string $title = null;
 
     /**
      * Description of content-item.
      *
      * @var string|null $text
      */
-    private $text = null;
+    private ?string $text = null;
 
     /**
      * HTML to be embedded.
      *
      * @var string|null $html
      */
-    private $html = null;
+    private ?string $html = null;
 
     /**
      * Icon image object for content-item.
      *
      * @var Image|null $icon
      */
-    private $icon = null;
+    private ?Image $icon = null;
 
     /**
      * Thumbnail image object for content-item.
      *
      * @var Image|null $thumbnail
      */
-    private $thumbnail = null;
+    private ?Image $thumbnail = null;
 
     /**
      * Hide the item from learners by default?
      *
-     * @var bool $hideOnCreate
+     * @var bool|null $hideOnCreate
      */
-    private $hideOnCreate = null;
+    private ?bool $hideOnCreate = null;
 
     /**
      * Class constructor.
      *
-     * @param string $type Class type of content-item
-     * @param Placement[]|Placement $placementAdvices  Array of Placement objects (or single placement object) for item (optional)
-     * @param string $id   URL of content-item (optional)
+     * @param string                     $type              Class type of content-item
+     * @param Placement[]|Placement|null $placementAdvices  Array of Placement objects (or single placement object) for item (optional)
+     * @param string|null                $id                URL of content-item (optional)
      */
-    function __construct($type, $placementAdvices = null, $id = null)
+    function __construct(string $type, array|Placement|null $placementAdvices = null, ?string $id = null)
     {
         $this->type = $type;
         if (!empty($placementAdvices)) {
             if (!is_array($placementAdvices)) {
-                $placementAdvices = array($placementAdvices);
+                $placementAdvices = [$placementAdvices];
             }
             foreach ($placementAdvices as $placementAdvice) {
                 $this->placements[$placementAdvice->documentTarget] = $placementAdvice;
@@ -155,9 +156,9 @@ class Item
     /**
      * Set a URL value for the content-item.
      *
-     * @param string $url  URL value
+     * @param string|null $url  URL value
      */
-    public function setUrl($url)
+    public function setUrl(?string $url): void
     {
         $this->url = $url;
     }
@@ -165,9 +166,9 @@ class Item
     /**
      * Set a media type value for the content-item.
      *
-     * @param string $mediaType  Media type value
+     * @param string|null $mediaType  Media type value
      */
-    public function setMediaType($mediaType)
+    public function setMediaType(?string $mediaType): void
     {
         $this->mediaType = $mediaType;
     }
@@ -175,9 +176,9 @@ class Item
     /**
      * Set a title value for the content-item.
      *
-     * @param string $title  Title value
+     * @param string|null $title  Title value
      */
-    public function setTitle($title)
+    public function setTitle(?string $title): void
     {
         $this->title = $title;
     }
@@ -185,9 +186,9 @@ class Item
     /**
      * Set a link text value for the content-item.
      *
-     * @param string $text  Link text value
+     * @param string|null $text  Link text value
      */
-    public function setText($text)
+    public function setText(?string $text): void
     {
         $this->text = $text;
     }
@@ -195,9 +196,9 @@ class Item
     /**
      * Set an HTML embed value for the content-item.
      *
-     * @param string $html  HTML text value
+     * @param string|null $html  HTML text value
      */
-    public function setHtml($html)
+    public function setHtml(?string $html): void
     {
         $this->html = $html;
     }
@@ -205,9 +206,9 @@ class Item
     /**
      * Add a placement for the content-item.
      *
-     * @param Placement $placementAdvice  Placement advice object
+     * @param Placement|null $placementAdvice  Placement advice object
      */
-    public function addPlacementAdvice($placementAdvice)
+    public function addPlacementAdvice(?Placement $placementAdvice): void
     {
         if (!empty($placementAdvice)) {
             $this->placements[$placementAdvice->documentTarget] = $placementAdvice;
@@ -217,9 +218,9 @@ class Item
     /**
      * Set an icon image for the content-item.
      *
-     * @param Image $icon  Icon image object
+     * @param Image|null $icon  Icon image object
      */
-    public function setIcon($icon)
+    public function setIcon(?Image $icon): void
     {
         $this->icon = $icon;
     }
@@ -227,9 +228,9 @@ class Item
     /**
      * Set a thumbnail image for the content-item.
      *
-     * @param Image $thumbnail  Thumbnail image object
+     * @param Image|null $thumbnail  Thumbnail image object
      */
-    public function setThumbnail($thumbnail)
+    public function setThumbnail(?Image $thumbnail): void
     {
         $this->thumbnail = $thumbnail;
     }
@@ -239,7 +240,7 @@ class Item
      *
      * @param bool|null $hideOnCreate  True if the item should be hidden from learners
      */
-    public function setHideOnCreate($hideOnCreate)
+    public function setHideOnCreate(?bool $hideOnCreate): void
     {
         $this->hideOnCreate = $hideOnCreate;
     }
@@ -247,25 +248,25 @@ class Item
     /**
      * Wrap the content items to form a complete application/vnd.ims.lti.v1.contentitems+json media type instance.
      *
-     * @param mixed $items  An array of content items or a single item
-     * @param string $ltiVersion  LTI version in use
+     * @param Item[]|Item $items       An array of content items or a single item
+     * @param LtiVersion  $ltiVersion  LTI version in use
      *
      * @return string
      */
-    public static function toJson($items, $ltiVersion = Util::LTI_VERSION1)
+    public static function toJson(array|Item $items, LtiVersion $ltiVersion = LtiVersion::V1): string
     {
         if (!is_array($items)) {
-            $items = array($items);
+            $items = [$items];
         }
-        if ($ltiVersion !== Util::LTI_VERSION1P3) {
+        if ($ltiVersion !== LtiVersion::V1P3) {
             $obj = new \stdClass();
             $obj->{'@context'} = 'http://purl.imsglobal.org/ctx/lti/v1/ContentItem';
-            $obj->{'@graph'} = array();
+            $obj->{'@graph'} = [];
             foreach ($items as $item) {
                 $obj->{'@graph'}[] = $item->toJsonldObject();
             }
         } else {
-            $obj = array();
+            $obj = [];
             foreach ($items as $item) {
                 $obj[] = $item->toJsonObject();
             }
@@ -281,16 +282,16 @@ class Item
      *
      * @return array Array of Item objects
      */
-    public static function fromJson($items)
+    public static function fromJson(object $items): array
     {
         $isJsonLd = isset($items->{'@graph'});
         if ($isJsonLd) {
             $items = $items->{'@graph'};
         }
         if (!is_array($items)) {
-            $items = array($items);
+            $items = [$items];
         }
-        $objs = array();
+        $objs = [];
         foreach ($items as $item) {
             $obj = self::fromJsonItem($item);
             if (!empty($obj)) {
@@ -304,9 +305,9 @@ class Item
     /**
      * Wrap the content item to form an item complying with the application/vnd.ims.lti.v1.contentitems+json media type.
      *
-     * @return object
+     * @return object  JSON object
      */
-    protected function toJsonldObject()
+    protected function toJsonldObject(): object
     {
         $item = new \stdClass();
         if (!empty($this->id)) {
@@ -339,7 +340,7 @@ class Item
         }
         if (!empty($this->placements)) {
             $placementAdvice = new \stdClass();
-            $placementAdvices = array();
+            $placementAdvices = [];
             foreach ($this->placements as $placement) {
                 $obj = $placement->toJsonldObject();
                 if (!empty($obj)) {
@@ -372,9 +373,9 @@ class Item
     /**
      * Wrap the content items to form a complete value for the https://purl.imsglobal.org/spec/lti-dl/claim/content_items claim.
      *
-     * @return object
+     * @return object  JSON object
      */
-    protected function toJsonObject()
+    protected function toJsonObject(): object
     {
         $item = new \stdClass();
         switch ($this->type) {
@@ -387,7 +388,7 @@ class Item
             case 'ContentItem':
                 if (empty($this->url)) {
                     $item->type = self::TYPE_HTML;
-                } elseif (!empty($this->mediaType) && (strpos($this->mediaType, 'image') === 0)) {
+                } elseif (!empty($this->mediaType) && str_starts_with($this->mediaType, 'image')) {
                     $item->type = self::TYPE_IMAGE;
                 } else {
                     $item->type = self::TYPE_LINK;
@@ -410,17 +411,13 @@ class Item
             $item->url = $this->url;
         }
         foreach ($this->placements as $type => $placement) {
-            switch ($type) {
-                case Placement::TYPE_EMBED:
-                case Placement::TYPE_IFRAME:
-                case Placement::TYPE_WINDOW:
-                case Placement::TYPE_FRAME:
-                    $obj = $placement->toJsonObject();
-                    break;
-                default:
-                    $obj = null;
-                    break;
-            }
+            $obj = match ($type) {
+                Placement::TYPE_EMBED,
+                Placement::TYPE_IFRAME,
+                Placement::TYPE_WINDOW,
+                Placement::TYPE_FRAME => $placement->toJsonObject(),
+                default => null
+            };
             if (!empty($obj)) {
                 $item->{$type} = $obj;
             }
@@ -445,7 +442,7 @@ class Item
      *
      * @return Item|LtiLinkItem|FileItem  The content-item object
      */
-    public static function fromJsonItem($item)
+    public static function fromJsonItem(object $item): Item|LtiLinkItem|FileItem
     {
         $obj = null;
         $placement = null;
@@ -453,19 +450,13 @@ class Item
             if (isset($item->presentationDocumentTarget)) {
                 $placement = Placement::fromJsonObject($item, $item->presentationDocumentTarget);
             }
-            switch ($item->{'@type'}) {
-                case 'ContentItem':
-                    $obj = new Item('ContentItem', $placement);
-                    break;
-                case 'LtiLinkItem':
-                    $obj = new LtiLinkItem($placement);
-                    break;
-                case 'FileItem':
-                    $obj = new FileItem($placement);
-                    break;
-            }
+            $obj = match ($item->{'@type'}) {
+                'ContentItem' => new Item('ContentItem', $placement),
+                'LtiLinkItem' => new LtiLinkItem($placement),
+                'FileItem' => new FileItem($placement)
+            };
         } elseif (isset($item->type)) {
-            $placements = array();
+            $placements = [];
             $placement = Placement::fromJsonObject($item, 'embed');
             if (!empty($placement)) {
                 $placements[] = $placement;
@@ -478,22 +469,14 @@ class Item
             if (!empty($placement)) {
                 $placements[] = $placement;
             }
-            switch ($item->type) {
-                case self::TYPE_LINK:
-                case self::TYPE_HTML:
-                case self::TYPE_IMAGE:
-                    $obj = new Item($item->type, $placements);
-                    break;
-                case self::TYPE_LTI_LINK:
-                    $obj = new LtiLinkItem($placements);
-                    break;
-                case self::TYPE_LTI_ASSIGNMENT:
-                    $obj = new LtiAssignmentItem($placements);
-                    break;
-                case self::TYPE_FILE:
-                    $obj = new FileItem($placements);
-                    break;
-            }
+            $obj = match ($item->type) {
+                self::TYPE_LINK,
+                self::TYPE_HTML,
+                self::TYPE_IMAGE => new Item($item->type, $placements),
+                self::TYPE_LTI_LINK => new LtiLinkItem($placements),
+                self::TYPE_LTI_ASSIGNMENT => new LtiAssignmentItem($placements),
+                self::TYPE_FILE => new FileItem($placements)
+            };
         }
         if (!empty($obj)) {
             $obj->fromJsonObject($item);
@@ -507,7 +490,7 @@ class Item
      *
      * @param object $item  A JSON object representing a content-item
      */
-    protected function fromJsonObject($item)
+    protected function fromJsonObject(object $item): void
     {
         if (isset($item->{'@id'})) {
             $this->id = $item->{'@id'};
