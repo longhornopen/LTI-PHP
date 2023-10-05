@@ -271,7 +271,7 @@ class Tool
      *
      * @var int $stateLife
      */
-    public static int $stateLife = 10;
+    public static int $stateLife = 60;
 
     /**
      * Period in milliseconds to wait for a response to a postMessage
