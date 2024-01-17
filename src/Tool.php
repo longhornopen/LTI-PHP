@@ -878,12 +878,12 @@ class Tool
         if (!empty($claims)) {
             $claims = array_unique($claims);
         }
-        $custom = [];
+        $custom = new \stdClass();
         foreach ($constants as $name => $value) {
-            $custom[$name] = $value;
+            $custom->{$name} = $value;
         }
         foreach ($variables as $name => $value) {
-            $custom[$name] = '$' . $value;
+            $custom->{$name} = '$' . $value;
         }
         $toolConfig = [];
         $toolConfig['application_type'] = 'web';
@@ -904,7 +904,10 @@ class Tool
         ];
         $toolConfig['scope'] = implode(' ', array_intersect($this->requiredScopes, $scopesSupported));
         if (!empty($iconUrl)) {
-            $toolConfig['logo_uri'] = "{$this->baseUrl}{$iconUrl}";
+            if ((strpos($iconUrl, '://') === false) && !empty($this->baseUrl)) {
+                $iconUrl = "{$this->baseUrl}{$iconUrl}";
+            }
+            $toolConfig['logo_uri'] = $iconUrl;
         }
 
         return $toolConfig;
@@ -916,9 +919,9 @@ class Tool
      * @param array $platformConfig  Platform configuration data
      * @param array $toolConfig      Tool configuration data
      *
-     * @return array  Registration data
+     * @return array|null  Registration data
      */
-    protected function sendRegistration(array $platformConfig, array $toolConfig): array
+    protected function sendRegistration(array $platformConfig, array $toolConfig): ?array
     {
         if ($this->ok) {
             $parameters = Util::getRequestParameters();
@@ -1198,11 +1201,11 @@ EOD;
                         $errorUrl .= '&';
                     }
                     if ($this->debugMode && !is_null($this->reason)) {
-                        $errorUrl .= 'lti_errormsg=' . urlencode("Debug error: {$this->reason}");
+                        $errorUrl .= 'lti_errormsg=' . Util::urlEncode("Debug error: {$this->reason}");
                     } else {
-                        $errorUrl .= 'lti_errormsg=' . urlencode($this->message);
+                        $errorUrl .= 'lti_errormsg=' . Util::urlEncode($this->message);
                         if (!is_null($this->reason)) {
-                            $errorUrl .= '&lti_errorlog=' . urlencode("Debug error: {$this->reason}");
+                            $errorUrl .= '&lti_errorlog=' . Util::urlEncode("Debug error: {$this->reason}");
                         }
                     }
                     header("Location: {$errorUrl}");
