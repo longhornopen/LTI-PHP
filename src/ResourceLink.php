@@ -103,9 +103,9 @@ class ResourceLink
     /**
      * Primary key value for resource link being shared (if any).
      *
-     * @var string|null $primaryResourceLinkId
+     * @var int|null $primaryResourceLinkId
      */
-    public ?string $primaryResourceLinkId = null;
+    public ?int $primaryResourceLinkId = null;
 
     /**
      * Whether the sharing request has been approved by the primary resource link.
@@ -154,14 +154,14 @@ class ResourceLink
      *
      * @var Context|null $context
      */
-    private $context = null;
+    private ?Context $context = null;
 
     /**
      * Context ID for this resource link.
      *
      * @var int|null $contextId
      */
-    private $contextId = null;
+    private ?int $contextId = null;
 
     /**
      * Setting values (LTI parameters, custom parameters and local parameters).
@@ -208,6 +208,8 @@ class ResourceLink
 
     /**
      * Initialise the resource link.
+     *
+     * @return void
      */
     public function initialize(): void
     {
@@ -225,6 +227,8 @@ class ResourceLink
      * Initialise the resource link.
      *
      * Synonym for initialize().
+     *
+     * @return void
      */
     public function initialise(): void
     {
@@ -288,6 +292,8 @@ class ResourceLink
      * Set platform ID.
      *
      * @param int|null $platformId  Platform ID for this resource link.
+     *
+     * @return void
      */
     public function setPlatformId(?int $platformId): void
     {
@@ -327,6 +333,8 @@ class ResourceLink
      * Set context.
      *
      * @param Context $context  Context for this resource link.
+     *
+     * @return void
      */
     public function setContext(Context $context): void
     {
@@ -338,6 +346,8 @@ class ResourceLink
      * Set context ID.
      *
      * @param int|null $contextId  Context ID for this resource link.
+     *
+     * @return void
      */
     public function setContextId(?int $contextId): void
     {
@@ -360,9 +370,9 @@ class ResourceLink
     /**
      * Get resource link ID.
      *
-     * @return string  ID for this resource link.
+     * @return string|null  ID for this resource link.
      */
-    public function getId(): string
+    public function getId(): ?string
     {
         return $this->ltiResourceLinkId;
     }
@@ -428,6 +438,8 @@ class ResourceLink
      *
      * @param string $name              Name of setting
      * @param string|array|null $value  Value to set, use an empty value to delete a setting (optional, default is null)
+     *
+     * @return void
      */
     public function setSetting(string $name, string|array|null $value = null): void
     {
@@ -456,6 +468,8 @@ class ResourceLink
      * Set an array of all setting values.
      *
      * @param array $settings  Associative array of setting values
+     *
+     * @return void
      */
     public function setSettings(array $settings): void
     {
@@ -623,7 +637,7 @@ class ResourceLink
         if (!empty($urlAGS)) {
             if (($action === ServiceAction::Read) && ($ltiOutcome->type === OutcomeType::Decimal) && $sourceResourceLink->hasResultService()) {
                 $ok = $this->doResultService($ltiOutcome, $userResult, $urlAGS);
-            } elseif ((($action === ServiceAction::Write) && $this->checkValueType($ltiOutcome, array(OutcomeType::Decimal)) && $sourceResourceLink->hasScoreService()) ||
+            } elseif ((($action === ServiceAction::Write) && $this->checkValueType($ltiOutcome, [OutcomeType::Decimal]) && $sourceResourceLink->hasScoreService()) ||
                 ($action === ServiceAction::Delete)) {
                 if ($action === ServiceAction::Delete) {
                     $ltiOutcome->setValue(null);
@@ -641,7 +655,7 @@ class ResourceLink
             $outcome = $ltiOutcome->getValue();
             if (($action === ServiceAction::Read) && ($ltiOutcome->type === OutcomeType::Decimal)) {
                 $do = 'readResult';
-            } elseif (($action === ServiceAction::Write) && $this->checkValueType($ltiOutcome, array(OutcomeType::Decimal))) {
+            } elseif (($action === ServiceAction::Write) && $this->checkValueType($ltiOutcome, [OutcomeType::Decimal])) {
                 $do = 'replaceResult';
                 if (($ltiOutcome->getPointsPossible() <> 1) && ($ltiOutcome->getPointsPossible() > 0)) {
                     $outcome = $outcome / $ltiOutcome->getPointsPossible();
@@ -669,15 +683,15 @@ class ResourceLink
                             }
                         }
                         if (!empty($resultDataType)) {
-                            $xml = <<< EOF
+                            $xml = <<< EOD
 
           <resultData>
             <{$resultDataType}>{$comment}</{$resultDataType}>
           </resultData>
-EOF;
+EOD;
                         }
                     }
-                    $xml = <<< EOF
+                    $xml = <<< EOD
 
         <result>
           <resultScore>
@@ -685,16 +699,16 @@ EOF;
             <textString>{$outcome}</textString>
           </resultScore>{$xml}
         </result>
-EOF;
+EOD;
                 }
                 $sourcedId = htmlentities($sourcedId);
-                $xml = <<<EOF
+                $xml = <<< EOD
       <resultRecord>
         <sourcedGUID>
           <sourcedId>{$sourcedId}</sourcedId>
         </sourcedGUID>{$xml}
       </resultRecord>
-EOF;
+EOD;
                 if ($this->doLTI11Service($do, $urlLTI11, $xml)) {
                     switch ($action) {
                         case ServiceAction::Read:
@@ -716,12 +730,14 @@ EOF;
         if (!$ok && !empty($urlExt)) {
             $do = '';
             $outcome = $ltiOutcome->getValue();
-            if (($action === ServiceAction::Read) && ($ltiOutcome->type === OutcomeType::Decimal)) {
+            if ($action === ServiceAction::Read) {
                 $do = 'basic-lis-readresult';
-            } elseif (($action === ServiceAction::Write) && $this->checkValueType($ltiOutcome, array(OutcomeType::Decimal))) {
+            } elseif ($action === ServiceAction::Write) {
                 $do = 'basic-lis-updateresult';
-                if (($ltiOutcome->getPointsPossible() <> 1) && ($ltiOutcome->getPointsPossible() > 0)) {
-                    $outcome = $outcome / $ltiOutcome->getPointsPossible();
+                if ($this->checkValueType($ltiOutcome, [OutcomeType::Decimal])) {
+                    if (($ltiOutcome->getPointsPossible() <> 1) && ($ltiOutcome->getPointsPossible() > 0)) {
+                        $outcome = $outcome / $ltiOutcome->getPointsPossible();
+                    }
                 }
             } elseif ($action === ServiceAction::Delete) {
                 $do = 'basic-lis-deleteresult';
@@ -793,7 +809,8 @@ EOF;
         $do = match ($action) {
             ServiceAction::Read => 'basic-lti-loadsetting',
             ServiceAction::Write => 'basic-lti-savesetting',
-            ServiceAction::Delete => 'basic-lti-deletesetting'
+            ServiceAction::Delete => 'basic-lti-deletesetting',
+            default => null
         };
         if (isset($do)) {
             $url = $this->getSetting('ext_ims_lti_tool_setting_url');
@@ -984,7 +1001,6 @@ EOF;
 
 // Set the user name
                     $firstname = $members[$i]['person_name_given'] ?? '';
-                    $middlename = $members[$i]['person_name_middle'] ?? '';
                     $lastname = $members[$i]['person_name_family'] ?? '';
                     $fullname = $members[$i]['person_name_full'] ?? '';
                     $userResult->setNames($firstname, $lastname, $fullname);
@@ -1255,7 +1271,7 @@ EOF;
      *
      * @return ResourceLink
      */
-    public static function fromContext(Context $context, string $ltiResourceLinkId, ?string $tempId = null)
+    public static function fromContext(Context $context, string $ltiResourceLinkId, ?string $tempId = null): ResourceLink
     {
         $resourceLink = new ResourceLink();
         $resourceLink->setContext($context);
@@ -1331,7 +1347,7 @@ EOF;
         if (!$ok) {
 // Convert numeric values to decimal
             if ($type === OutcomeType::Percentage) {
-                if (substr($value, -1) === '%') {
+                if (str_ends_with($value, '%')) {
                     $value = substr($value, 0, -1);
                 }
                 $ok = is_numeric($value) && ($value >= 0) && ($value <= 100);
@@ -1369,7 +1385,7 @@ EOF;
                 $ok = is_numeric($value) && ($value >= 0) && ($value <= 1);
                 if ($ok) {
                     $ltiOutcome->type = OutcomeType::Decimal;
-                } elseif (substr($value, -1) === '%') {
+                } elseif (str_ends_with($value, '%')) {
                     $value = substr($value, 0, -1);
                     $ok = is_numeric($value) && ($value >= 0) && ($value <= 100);
                     if ($ok) {
@@ -1445,10 +1461,14 @@ EOF;
                     $this->extResponseHeaders = $http->responseHeaders;
                     try {
                         $this->extDoc = new DOMDocument();
-                        $this->extDoc->loadXML($http->response);
-                        $this->extNodes = $this->domnodeToArray($this->extDoc->documentElement);
-                        if (isset($this->extNodes['statusinfo']['codemajor']) && ($this->extNodes['statusinfo']['codemajor'] === 'Success')) {
-                            $ok = true;
+                        @$this->extDoc->loadXML($http->response);
+                        if ($this->extDoc->documentElement) {
+                            $this->extNodes = $this->domnodeToArray($this->extDoc->documentElement);
+                            if (isset($this->extNodes['statusinfo']['codemajor']) && ($this->extNodes['statusinfo']['codemajor'] === 'Success')) {
+                                $ok = true;
+                            }
+                        } else {
+                            Util::setMessage(true, 'Invalid XML in service response');
                         }
                     } catch (\Exception $e) {
 
@@ -1516,7 +1536,7 @@ EOF;
      *
      * @return bool  True if the request successfully obtained a response
      */
-    private function doScoreService(Outcome $ltiOutcome, UserResult $userResult, string $url)
+    private function doScoreService(Outcome $ltiOutcome, UserResult $userResult, string $url): bool
     {
         $ok = false;
         $this->extRequest = '';
@@ -1604,11 +1624,15 @@ EOD;
                     $this->extResponseHeaders = $http->responseHeaders;
                     try {
                         $this->extDoc = new DOMDocument();
-                        $this->extDoc->loadXML($http->response);
-                        $this->extNodes = $this->domnodeToArray($this->extDoc->documentElement);
-                        if (isset($this->extNodes['imsx_POXHeader']['imsx_POXResponseHeaderInfo']['imsx_statusInfo']['imsx_codeMajor']) &&
-                            ($this->extNodes['imsx_POXHeader']['imsx_POXResponseHeaderInfo']['imsx_statusInfo']['imsx_codeMajor'] === 'success')) {
-                            $ok = true;
+                        @$this->extDoc->loadXML($http->response);
+                        if ($this->extDoc->documentElement) {
+                            $this->extNodes = $this->domnodeToArray($this->extDoc->documentElement);
+                            if (isset($this->extNodes['imsx_POXHeader']['imsx_POXResponseHeaderInfo']['imsx_statusInfo']['imsx_codeMajor']) &&
+                                ($this->extNodes['imsx_POXHeader']['imsx_POXResponseHeaderInfo']['imsx_statusInfo']['imsx_codeMajor'] === 'success')) {
+                                $ok = true;
+                            }
+                        } else {
+                            Util::setMessage(true, 'Invalid XML in service response');
                         }
                     } catch (\Exception $e) {
 

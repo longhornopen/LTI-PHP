@@ -5,6 +5,7 @@ namespace ceLTIc\LTI\Service;
 
 use ceLTIc\LTI\Context;
 use ceLTIc\LTI\User;
+use ceLTIc\LTI\Util;
 
 /**
  * Class to implement the Course Groups service
@@ -153,18 +154,32 @@ class Groups extends Service
             $endpoint = $this->endpoint;
             do {
                 $http = $this->send('GET', $parameters);
-                $ok = !empty($http) && $http->ok;
+                $ok = $http->ok;
                 $url = '';
                 if ($ok) {
-                    if (isset($http->responseJson->sets)) {
-                        foreach ($http->responseJson->sets as $set) {
-                            $groupSets[$set->id] = [
-                                'title' => $set->name,
+                    $sets = Util::checkArray($http->responseJson, 'sets', true);
+                    foreach ($sets as $set) {
+                        if (!is_object($set)) {
+                            Util::setMessage(true,
+                                'The \'sets\' element must comprise an array of objects (' . gettype($set) . ' found)');
+                            continue;
+                        }
+                        $id = Util::checkString($set, 'id', true, true);
+                        $name = Util::checkString($set, 'name', true, true);
+                        $tag = Util::checkString($set, 'tag', false, true);
+                        $hidden = Util::checkBoolean($set, 'hidden', false, false);
+                        if (!empty($id) && !empty($name)) {
+                            $groupSets[$id] = [
+                                'title' => $name,
+                                'hidden' => $hidden,
                                 'groups' => [],
                                 'num_members' => 0,
                                 'num_staff' => 0,
                                 'num_learners' => 0
                             ];
+                            if (!empty($tag)) {
+                                $groupSets[$id]['tag'] = $tag;
+                            }
                         }
                     }
                     if (!$this->pagingMode && $http->hasRelativeLink('next')) {
@@ -224,34 +239,54 @@ class Groups extends Service
             $endpoint = $this->endpoint;
             do {
                 $http = $this->send('GET', $parameters);
-                $ok = !empty($http) && $http->ok;
+                $ok = $http->ok;
                 $url = '';
                 if ($ok) {
-                    if (isset($http->responseJson->groups)) {
-                        foreach ($http->responseJson->groups as $agroup) {
-                            if (!$allowNonSets && empty($agroup->set_id)) {
+                    $jsongroups = Util::checkArray($http->responseJson, 'groups', true);
+                    foreach ($jsongroups as $agroup) {
+                        if (!is_object($agroup)) {
+                            Util::setMessage(true,
+                                'The \'groups\' element must comprise an array of objects (' . gettype($agroup) . ' found)');
+                            continue;
+                        }
+                        $id = Util::checkString($agroup, 'groups/id', true, true);
+                        $name = Util::checkString($agroup, 'groups/name', true, true);
+                        $tag = Util::checkString($agroup, 'groups/tag');
+                        $hidden = Util::checkBoolean($agroup, 'hidden', false, false);
+                        $setids = Util::checkArray($agroup, 'groups/set_ids');
+                        if (!empty($id) && !empty($name)) {
+                            if (!$allowNonSets && empty($setids)) {
                                 continue;
                             }
                             $group = [
-                                'title' => $agroup->name
+                                'title' => $name,
+                                'hidden' => $hidden
                             ];
-                            if (!empty($agroup->set_id)) {
-                                if (!array_key_exists($agroup->set_id, $groupSets)) {
-                                    $groupSets[$agroup->set_id] = [
-                                        'title' => "Set {$agroup->set_id}",
-                                        'groups' => [],
-                                        'num_members' => 0,
-                                        'num_staff' => 0,
-                                        'num_learners' => 0
-                                    ];
+                            if (!empty($tag)) {
+                                $group['tag'] = $tag;
+                            }
+                            if (!empty($setids)) {
+                                foreach ($setids as $setid) {
+                                    if (!array_key_exists($setid, $groupSets)) {
+                                        $groupSets[$setid] = [
+                                            'title' => "Set {$setid}",
+                                            'groups' => [],
+                                            'num_members' => 0,
+                                            'num_staff' => 0,
+                                            'num_learners' => 0
+                                        ];
+                                    }
+                                    $groupSets[$setid]['groups'][] = $id;
+                                    if (!isset($group['set'])) {
+                                        $group['set'] = $setid;
+                                    } elseif (!is_array($group['set'])) {
+                                        $group['set'] = [$group['set'], $setid];
+                                    } else {
+                                        $group['set'][] = $setid;
+                                    }
                                 }
-                                $groupSets[$agroup->set_id]['groups'][] = $agroup->id;
-                                $group['set'] = $agroup->set_id;
                             }
-                            if (!empty($agroup->tag)) {
-                                $group['tag'] = $agroup->tag;
-                            }
-                            $groups[$agroup->id] = $group;
+                            $groups[$id] = $group;
                         }
                     }
                     if (!$this->pagingMode && $http->hasRelativeLink('next')) {

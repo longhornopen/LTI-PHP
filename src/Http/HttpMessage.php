@@ -149,6 +149,8 @@ class HttpMessage
      * Set the HTTP client to use for sending the message.
      *
      * @param ClientInterface|null $httpClient
+     *
+     * @return void
      */
     public static function setHttpClient(?ClientInterface $httpClient = null): void
     {
@@ -273,6 +275,8 @@ class HttpMessage
 
     /**
      * Parse the response headers for relative links.
+     *
+     * @return void
      */
     private function parseRelativeLinks(): void
     {
@@ -282,7 +286,7 @@ class HttpMessage
                 $links = explode(',', $matches[2][$i]);
                 foreach ($links as $link) {
                     if (preg_match('/^\<([^\>]+)\>; *rel=([^ ]+)$/', trim($link), $match)) {
-                        $rel = strtolower(utf8_decode($match[2]));
+                        $rel = strtolower(mb_convert_encoding($match[2], 'ISO-8859-1', 'UTF-8'));
                         if (str_starts_with($rel, '"') || str_starts_with($rel, '?')) {
                             $rel = substr($rel, 1, strlen($rel) - 2);
                         }

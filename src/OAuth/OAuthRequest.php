@@ -67,7 +67,10 @@ class OAuthRequest
     function __construct(string $http_method, string $http_url, ?array $parameters = null)
     {
         $parameters = ($parameters) ? $parameters : [];
-        $parameters = array_merge(OAuthUtil::parse_parameters(parse_url($http_url, PHP_URL_QUERY)), $parameters);
+        $query_params = parse_url($http_url, PHP_URL_QUERY);
+        if ($query_params) {
+            $parameters = OAuthUtil::array_merge_recursive(OAuthUtil::parse_parameters($query_params), $parameters);
+        }
         $this->parameters = $parameters;
         $this->http_method = $http_method;
         $this->http_url = $http_url;
@@ -126,26 +129,19 @@ class OAuthRequest
             // Find request headers
             $request_headers = OAuthUtil::get_headers();
 
-            // Parse the query-string to find GET parameters
-            if (isset($_SERVER['QUERY_STRING'])) {
-                $parameters = OAuthUtil::parse_parameters($_SERVER['QUERY_STRING']);
-            } else {
-                $parameters = [];
-            }
-
+            $parameters = [];
             if (($http_method === 'POST' && isset($request_headers['Content-Type']) && stristr($request_headers['Content-Type'],
                     'application/x-www-form-urlencoded')) || !empty($_POST)) {
                 // It's a POST request of the proper content-type, so parse POST
                 // parameters and add those overriding any duplicates from GET
-                $post_data = OAuthUtil::parse_parameters(file_get_contents(static::$POST_INPUT));
-                $parameters = array_merge_recursive($parameters, $post_data);
+                $parameters = OAuthUtil::parse_parameters(file_get_contents(static::$POST_INPUT));
             }
 
             // We have a Authorization-header with OAuth data. Parse the header
             // and add those overriding any duplicates from GET or POST
-            if (isset($request_headers['Authorization']) && substr($request_headers['Authorization'], 0, 6) === 'OAuth ') {
+            if (isset($request_headers['Authorization']) && str_starts_with($request_headers['Authorization'], 'OAuth ')) {
                 $header_parameters = OAuthUtil::split_header($request_headers['Authorization']);
-                $parameters = array_merge_recursive($parameters, $header_parameters);
+                $parameters = OAuthUtil::array_merge_recursive($parameters, $header_parameters);
             }
         }
 
@@ -173,10 +169,11 @@ class OAuthRequest
             'oauth_timestamp' => strval(OAuthRequest::generate_timestamp()),
             'oauth_consumer_key' => $consumer->key]
         ;
-        if ($token)
+        if ($token) {
             $defaults['oauth_token'] = $token->key;
+        }
 
-        $parameters = array_merge($defaults, $parameters);
+        $parameters = OAuthUtil::array_merge_recursive($defaults, $parameters);
 
         return new OAuthRequest($http_method, $http_url, $parameters);
     }
@@ -187,6 +184,8 @@ class OAuthRequest
      * @param string $name            Parameter name
      * @param string $value           Parameter value
      * @param bool $allow_duplicates  True if duplicates are allowed
+     *
+     * @return void
      */
     public function set_parameter(string $name, string $value, bool $allow_duplicates = true): void
     {
@@ -209,9 +208,9 @@ class OAuthRequest
      *
      * @param string $name  Parameter name
      *
-     * @return string|null
+     * @return string|array|null
      */
-    public function get_parameter(string $name): ?string
+    public function get_parameter(string $name): string|array|null
     {
         return isset($this->parameters[$name]) ? $this->parameters[$name] : null;
     }
@@ -230,6 +229,8 @@ class OAuthRequest
      * Delete a parameter.
      *
      * @param string $name  Parameter name
+     *
+     * @return void
      */
     public function unset_parameter(string $name): void
     {
@@ -295,16 +296,20 @@ class OAuthRequest
     public function get_normalized_http_url(): string
     {
         $parts = parse_url($this->http_url);
-
-        $scheme = (isset($parts['scheme'])) ? $parts['scheme'] : 'http';
-        $port = (isset($parts['port'])) ? $parts['port'] : (($scheme === 'https') ? '443' : '80');
-        $host = (isset($parts['host'])) ? strtolower($parts['host']) : '';
-        $path = (isset($parts['path'])) ? $parts['path'] : '';
-        if ((($scheme === 'https') && (intval($port) !== 443)) || (($scheme === 'http') && (intval($port) !== 80))) {
-            $host = "{$host}:{$port}";
+        if (is_array($parts)) {
+            $scheme = (isset($parts['scheme'])) ? $parts['scheme'] : 'http';
+            $port = (isset($parts['port'])) ? $parts['port'] : (($scheme === 'https') ? '443' : '80');
+            $host = (isset($parts['host'])) ? strtolower($parts['host']) : '';
+            $path = (isset($parts['path'])) ? $parts['path'] : '';
+            if ((($scheme === 'https') && (intval($port) !== 443)) || (($scheme === 'http') && (intval($port) !== 80))) {
+                $host = "{$host}:{$port}";
+            }
+            $url = "{$scheme}://{$host}{$path}";
+        } else {
+            $url = '';
         }
 
-        return "{$scheme}://{$host}{$path}";
+        return $url;
     }
 
     /**
@@ -352,8 +357,9 @@ class OAuthRequest
 
         $total = [];
         foreach ($this->parameters as $k => $v) {
-            if (substr($k, 0, 5) !== 'oauth')
+            if (!str_starts_with($k, 'oauth')) {
                 continue;
+            }
             if (is_array($v)) {
                 throw new OAuthException('Arrays not supported in headers');
             }
@@ -381,6 +387,8 @@ class OAuthRequest
      * @param OAuthSignatureMethod $signature_method  Signature method
      * @param OAuthConsumer $consumer                 Consumer
      * @param OAuthToken|null $token                  Token
+     *
+     * @return void
      */
     public function sign_request(OAuthSignatureMethod $signature_method, OAuthConsumer $consumer, ?OAuthToken $token): void
     {

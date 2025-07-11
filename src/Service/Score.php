@@ -16,6 +16,10 @@ use ceLTIc\LTI\Outcome;
  */
 class Score extends AssignmentGrade
 {
+    /**
+     * Media type for the Score service.
+     */
+    public const MEDIA_TYPE_SCORE = 'application/vnd.ims.lis.v1.score+json';
 
     /**
      * Access scope.
@@ -34,7 +38,7 @@ class Score extends AssignmentGrade
     {
         parent::__construct($platform, $endpoint, '/scores');
         $this->scope = self::$SCOPE;
-        $this->mediaType = 'application/vnd.ims.lis.v1.score+json';
+        $this->mediaType = self::MEDIA_TYPE_SCORE;
     }
 
     /**
@@ -48,23 +52,34 @@ class Score extends AssignmentGrade
     public function submit(Outcome $ltiOutcome, User $user): bool
     {
         $score = $ltiOutcome->getValue();
-        if (is_null($score)) {
-            $json = [
-                'activityProgress' => 'Initialized',
-                'gradingProgress' => 'NotReady'
-            ];
-        } else {
-            $json = [
-                'scoreGiven' => $score,
-                'scoreMaximum' => $ltiOutcome->getPointsPossible(),
-                'comment' => $ltiOutcome->comment,
-                'activityProgress' => $ltiOutcome->activityProgress,
-                'gradingProgress' => $ltiOutcome->gradingProgress
-            ];
+        $activityProgress = $ltiOutcome->activityProgress;
+        if (empty($activityProgress)) {
+            $activityProgress = 'Initialized';
         }
-        $json['userId'] = $user->ltiUserId;
-        $date = new \DateTime();
-        $json['timestamp'] = date_format($date, 'Y-m-d\TH:i:s.uP');
+        $gradingProgress = $ltiOutcome->gradingProgress;
+        if (empty($gradingProgress)) {
+            $gradingProgress = 'NotReady';
+        }
+        $json = [
+            'timestamp' => date_format(new \DateTime(), 'Y-m-d\TH:i:s.uP'),
+            'userId' => $user->ltiUserId,
+            'comment' => $ltiOutcome->comment,
+            'activityProgress' => $activityProgress,
+            'gradingProgress' => $gradingProgress
+        ];
+        if (!is_null($score)) {
+            $json['scoreGiven'] = $score;
+            $json['scoreMaximum'] = $ltiOutcome->getPointsPossible();
+        }
+        if (!empty($ltiOutcome->submissionStarted) || !empty($ltiOutcome->submissionCompleted)) {
+            $json['submission'] = [];
+            if (!empty($ltiOutcome->submissionStarted)) {
+                $json['submission']['startedAt'] = date_format($ltiOutcome->submissionStarted, 'Y-m-d\TH:i:s.uP');
+            }
+            if (!empty($ltiOutcome->submissionCompleted)) {
+                $json['submission']['submittedAt'] = date_format($ltiOutcome->submissionCompleted, 'Y-m-d\TH:i:s.uP');
+            }
+        }
         $data = json_encode($json);
         $http = $this->send('POST', null, $data);
 

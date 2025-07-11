@@ -75,14 +75,14 @@ interface ClientInterface
      *
      * @return array  The value of the headers
      */
-    public function getHeaders(): array|object;
+    public function getHeaders(): array|object|null;
 
     /**
      * Get the value of the headers for the last signed JWT (before any encryption).
      *
      * @return array  The value of the headers
      */
-    public static function getLastHeaders(): array;
+    public static function getLastHeaders(): array|object|null;
 
     /**
      * Check whether a JWT has a claim with the specified name.
@@ -96,36 +96,50 @@ interface ClientInterface
     /**
      * Get the value of the claim with the specified name.
      *
-     * @param string $name                                     Claim name
-     * @param int|string|bool|array|object|null $defaultValue  Default value
+     * @param string $name                                           Claim name
+     * @param int|float|string|bool|array|object|null $defaultValue  Default value
      *
-     * @return int|string|bool|array|object|null  The value of the claim with the specified name, or the default value if it does not exist
+     * @return int|float|string|bool|array|object|null  The value of the claim with the specified name, or the default value if it does not exist
      */
-    public function getClaim(string $name, int|string|bool|array|object|null $defaultValue = null): int|string|bool|array|object|null;
+    public function getClaim(string $name, int|float|string|bool|array|object|null $defaultValue = null): int|float|string|bool|array|object|null;
 
     /**
      * Get the value of the payload.
      *
      * @return array  The value of the payload
      */
-    public function getPayload(): array|object;
+    public function getPayload(): array|object|null;
 
     /**
      * Get the value of the payload for the last signed JWT (before any encryption).
      *
      * @return array  The value of the payload
      */
-    public static function getLastPayload(): array;
+    public static function getLastPayload(): array|object|null;
 
     /**
      * Verify the signature of the JWT.
      *
+     * @deprecated Use verifySignature() instead
+     *
      * @param string|null $publicKey  Public key of issuer
+     * @param string|null $jku        JSON Web Key URL of issuer (optional)
+     *
+     * @return bool  True if the JWT has a valid signature
+     */
+    public function verify(?string $publicKey, ?string $jku = null): bool;
+
+    /**
+     * Verify the signature of the JWT.
+     *
+     * If a new public key is fetched and used to successfully verify the signature, the value of the publicKey parameter is updated.
+     *
+     * @param string|null $publicKey  Public key of issuer (passed by reference)
      * @param string|null $jku        JSON Web Key URL of issuer (optional)
      *
      * @return bool True if the JWT has a valid signature
      */
-    public function verify(?string $publicKey, ?string $jku = null): bool;
+    public function verifySignature(?string &$publicKey, ?string $jku = null): bool;
 
     /**
      * Sign the JWT.
@@ -171,4 +185,5 @@ interface ClientInterface
      * @return array  JWKS keys
      */
     public static function getJWKS(string $pemKey, string $signatureMethod, ?string $kid = null): array;
+
 }

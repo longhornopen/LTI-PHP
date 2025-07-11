@@ -59,11 +59,13 @@ trait ApiHook
      * @param string $hookName    Name of hook
      * @param string $familyCode  Family code for current platform
      * @param string $className   Name of implementing class
+     *
+     * @return void
      */
     public static function registerApiHook(string $hookName, string $familyCode, string $className): void
     {
-        $objectClass = get_class();
-        self::$API_HOOKS["{$objectClass}-{$hookName}-{$familyCode}"] = $className;
+        $class = self::class;
+        self::$API_HOOKS["{$class}-{$hookName}-{$familyCode}"] = $className;
     }
 
     /**

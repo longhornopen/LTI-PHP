@@ -142,6 +142,8 @@ class User
 
     /**
      * Initialise the user.
+     *
+     * @return void
      */
     public function initialize(): void
     {
@@ -161,6 +163,8 @@ class User
      * Initialise the user.
      *
      * Synonym for initialize().
+     *
+     * @return void
      */
     public function initialise(): void
     {
@@ -174,10 +178,12 @@ class User
      * @param string $lastname         User's last name.
      * @param string $fullname         User's full name.
      * @param string|null $middlename  User's middle name (optional, default is none).
+     *
+     * @return void
      */
     public function setNames(string $firstname, string $lastname, string $fullname, ?string $middlename = null): void
     {
-        $names = array(0 => '', 1 => '');
+        $names = [0 => '', 1 => ''];
         if (!empty($fullname)) {
             $this->fullname = trim($fullname);
             $names = preg_split("/[\s]+/", $this->fullname);
@@ -196,7 +202,7 @@ class User
             $this->middlename = trim($middlename);
         } elseif ((count($names) > 2) && !empty($names[1])) {
             $this->middlename = '';
-            for ($i = 1; $i < count($names); $i++) {
+            for ($i = 1; $i < count($names) - 1; $i++) {
                 $this->middlename .= $names[$i] . ' ';
             }
             $this->middlename = trim($this->middlename);
@@ -224,16 +230,18 @@ class User
     /**
      * Set the user's email address.
      *
-     * @param string $email              Email address value
+     * @param stringnull $email          Email address value
      * @param string|null $defaultEmail  Value to use if no email is provided (optional, default is none)
+     *
+     * @return void
      */
-    public function setEmail(string $email, ?string $defaultEmail = null): void
+    public function setEmail(?string $email, ?string $defaultEmail = null): void
     {
         if (!empty($email)) {
             $this->email = $email;
         } elseif (!empty($defaultEmail)) {
             $this->email = $defaultEmail;
-            if (substr($this->email, 0, 1) === '@') {
+            if (str_starts_with($this->email, '@')) {
                 if (!empty($this->username)) {
                     $this->email = "{$this->username}{$this->email}";
                 } else {

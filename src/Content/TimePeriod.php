@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace ceLTIc\LTI\Content;
 
+use ceLTIc\LTI\Util;
+
 /**
  * Class to represent a time period object
  *
@@ -87,20 +89,27 @@ class TimePeriod
         $obj = null;
         $startDateTime = null;
         $endDateTime = null;
-        if (is_object($item)) {
-            $url = null;
-            foreach (get_object_vars($item) as $name => $value) {
-                switch ($name) {
-                    case 'startDateTime':
-                        $startDateTime = strtotime($item->startDateTime);
-                        break;
-                    case 'endDateTime':
-                        $endDateTime = strtotime($item->endDateTime);
-                        break;
-                }
+        foreach (get_object_vars($item) as $name => $value) {
+            if (!Util::$strictMode) {
+                $value = Util::valToString($value);
             }
-        } else {
-            $url = $item;
+            if (!is_string($value)) {
+                continue;
+            }
+            switch ($name) {
+                case 'startDateTime':
+                    $startDateTime = strtotime($value);
+                    if ($startDateTime === false) {
+                        $startDateTime = null;
+                    }
+                    break;
+                case 'endDateTime':
+                    $endDateTime = strtotime($value);
+                    if ($endDateTime === false) {
+                        $endDateTime = null;
+                    }
+                    break;
+            }
         }
         if ($startDateTime || $endDateTime) {
             $obj = new TimePeriod($startDateTime, $endDateTime);

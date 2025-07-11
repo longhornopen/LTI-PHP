@@ -5,6 +5,7 @@ namespace ceLTIc\LTI;
 
 use ceLTIc\LTI\OAuth;
 use ceLTIc\LTI\Enum\LogLevel;
+use Psr\Log\LoggerInterface;
 
 /**
  * Class to implement utility methods
@@ -44,7 +45,7 @@ final class Util
         'auto_create' => ['suffix' => 'dl', 'group' => 'deep_linking_settings', 'claim' => 'auto_create', 'isBoolean' => true],
         'can_confirm' => ['suffix' => 'dl', 'group' => 'deep_linking_settings', 'claim' => 'can_confirm'],
         'content_item_return_url' => ['suffix' => 'dl', 'group' => 'deep_linking_settings', 'claim' => 'deep_link_return_url'],
-        'content_items' => ['suffix' => 'dl', 'group' => '', 'claim' => 'content_items', 'isObject' => true],
+        'content_items' => ['suffix' => 'dl', 'group' => '', 'claim' => 'content_items', 'isContentItemSelection' => true],
         'data' => ['suffix' => 'dl', 'group' => 'deep_linking_settings', 'claim' => 'data'],
         'data.LtiDeepLinkingResponse' => ['suffix' => 'dl', 'group' => '', 'claim' => 'data'],
         'text' => ['suffix' => 'dl', 'group' => 'deep_linking_settings', 'claim' => 'text'],
@@ -77,6 +78,8 @@ final class Util
         'role_scope_mentor' => ['suffix' => '', 'group' => '', 'claim' => 'role_scope_mentor', 'isArray' => true],
         'platform_id' => ['suffix' => '', 'group' => null, 'claim' => 'iss'],
         'deployment_id' => ['suffix' => '', 'group' => '', 'claim' => 'deployment_id'],
+        'oauth_nonce' => ['suffix' => '', 'group' => null, 'claim' => 'nonce'],
+        'oauth_timestamp' => ['suffix' => '', 'group' => null, 'claim' => 'iat', 'isInteger' => true],
         'lti_message_type' => ['suffix' => '', 'group' => '', 'claim' => 'message_type'],
         'lti_version' => ['suffix' => '', 'group' => '', 'claim' => 'version'],
         'resource_link_description' => ['suffix' => '', 'group' => 'resource_link', 'claim' => 'description'],
@@ -122,7 +125,13 @@ final class Util
         'custom_ap_verified_user_family_name' => ['suffix' => 'ap', 'group' => 'verified_user', 'claim' => 'family_name'],
         'custom_ap_verified_user_full_name' => ['suffix' => 'ap', 'group' => 'verified_user', 'claim' => 'full_name'],
         'custom_ap_verified_user_image' => ['suffix' => 'ap', 'group' => 'verified_user', 'claim' => 'picture'],
-        'custom_ap_end_assessment_return' => ['suffix' => 'ap', 'group' => '', 'claim' => 'end_assessment_return', 'isBoolean' => true]
+        'custom_ap_end_assessment_return' => ['suffix' => 'ap', 'group' => '', 'claim' => 'end_assessment_return', 'isBoolean' => true],
+        'custom_caliper_endpoint_url' => ['suffix' => 'ces', 'group' => 'caliper-endpoint-service', 'claim' => 'caliper_endpoint_url'],
+        'custom_caliper_federated_session_id' => ['suffix' => 'ces', 'group' => 'caliper-endpoint-service', 'claim' => 'caliper_federated_session_id'],
+        'custom_caliper_maximum_payload_size' => ['suffix' => 'ces', 'group' => 'caliper-endpoint-service', 'claim' => 'caliper_maximum_payload_size', 'isInteger' => true],
+        'custom_caliper_supported_extensions' => ['suffix' => 'ces', 'group' => 'caliper-endpoint-service', 'claim' => 'caliper_supported_extensions', 'isObject' => true],
+        'custom_caliper_supported_versions' => ['suffix' => 'ces', 'group' => 'caliper-endpoint-service', 'claim' => 'caliper_supported_versions', 'isArray' => true],
+        'custom_caliper_scopes' => ['suffix' => 'ces', 'group' => 'caliper-endpoint-service', 'claim' => 'scopes', 'isArray' => true]
     ];
 
     /**
@@ -164,11 +173,39 @@ final class Util
     public static LogLevel $logLevel = LogLevel::None;
 
     /**
+     * Whether full compliance with the LTI specification is required.
+     *
+     * @var bool $strictMode
+     */
+    public static bool $strictMode = false;
+
+    /**
+     * Whether the automatic saving of fetched valid public keys should be disabled.
+     *
+     * @var bool $disableFetchedPublicKeysSave
+     */
+    public static bool $disableFetchedPublicKeysSave = false;
+
+    /**
      * Delay (in seconds) before a manual button is displayed in case a browser is blocking a form submission.
      *
      * @var int $formSubmissionTimeout
      */
     public static int $formSubmissionTimeout = 2;
+
+    /**
+     * The client used to handle log messages.
+     *
+     * @var LoggerInterface $loggerClient
+     */
+    private static LoggerInterface $loggerClient;
+
+    /**
+     * Messages relating to service request.
+     *
+     * @var array $messages
+     */
+    private static array $messages = [true => [], false => []];
 
     /**
      * Check whether the request received could be an LTI message.
@@ -206,11 +243,13 @@ final class Util
      *
      * @param string $message   Message to be logged
      * @param bool $showSource  True if the name and line number of the current file are to be included
+     *
+     * @return void
      */
     public static function logError(string $message, bool $showSource = true): void
     {
         if (self::$logLevel->logError()) {
-            self::log("[ERROR] {$message}", $showSource);
+            self::logMessage($message, LogLevel::Error, $showSource);
         }
     }
 
@@ -219,11 +258,13 @@ final class Util
      *
      * @param string $message   Message to be logged
      * @param bool $showSource  True if the name and line number of the current file are to be included
+     *
+     * @return void
      */
     public static function logInfo(string $message, bool $showSource = false): void
     {
         if (self::$logLevel->logInfo()) {
-            self::log("[INFO] {$message}", $showSource);
+            self::logMessage($message, LogLevel::Info, $showSource);
         }
     }
 
@@ -232,11 +273,13 @@ final class Util
      *
      * @param string $message   Message to be logged
      * @param bool $showSource  True if the name and line number of the current file are to be included
+     *
+     * @return void
      */
     public static function logDebug(string $message, bool $showSource = false): void
     {
         if (self::$logLevel->logDebug()) {
-            self::log("[DEBUG] {$message}", $showSource);
+            self::logMessage($message, LogLevel::Debug, $showSource);
         }
     }
 
@@ -244,20 +287,37 @@ final class Util
      * Log a request received.
      *
      * @param bool $debugLevel  True if the request details should be logged at the debug level (optional, default is false for information level)
+     *
+     * @return void
      */
     public static function logRequest(bool $debugLevel = false): void
     {
         if (self::$logLevel->logDebug() || (!$debugLevel && self::$logLevel->logInfo())) {
-            $message = "{$_SERVER['REQUEST_METHOD']} request received for '{$_SERVER['REQUEST_URI']}'";
+            $message = '';
+            $headers = OAuth\OAuthUtil::get_headers();
             $body = file_get_contents(OAuth\OAuthRequest::$POST_INPUT);
             if (!empty($body)) {
-                $params = OAuth\OAuthUtil::parse_parameters($body);
-                if (!empty($params)) {
+                if (isset($headers['Content-Type']) && (trim(explode(';', $headers['Content-Type'])[0]) == 'application/x-www-form-urlencoded')) {
+                    $params = OAuth\OAuthUtil::parse_parameters($body);
                     $message .= " with body parameters of:\n" . var_export($params, true);
                 } else {
-                    $message .= " with a body of:\n" . var_export($body, true);
+                    $message .= ' with a body of:';
+                    if (!preg_match('/[^\s\x20-\x7e]/', $body)) {
+                        $message .= "\n" . var_export($body, true);
+                    } else {
+                        $message .= ' <Body contains binary data>';
+                    }
                 }
             }
+            if (!empty($headers)) {
+                if (!empty($message)) {
+                    $message .= "\nand ";
+                } else {
+                    $message .= " with ";
+                }
+                $message .= "headers of:\n" . var_export($headers, true);
+            }
+            $message = "{$_SERVER['REQUEST_METHOD']} request received for '{$_SERVER['REQUEST_URI']}'{$message}";
             if (!$debugLevel) {
                 self::logInfo($message);
             } else {
@@ -273,6 +333,8 @@ final class Util
      * @param array $params     Array of form parameters
      * @param string $method    HTTP Method used to submit form (optional, default is POST)
      * @param bool $debugLevel  True if the form details should always be logged (optional, default is false to use current log level)
+     *
+     * @return void
      */
     public static function logForm(string $url, array $params, string $method = 'POST', bool $debugLevel = false): void
     {
@@ -294,10 +356,29 @@ final class Util
     /**
      * Log an error message irrespective of the logging level.
      *
+     * @deprecated Use logMessage() instead
+     *
      * @param string $message   Message to be logged
      * @param bool $showSource  True if the name and line number of the current file are to be included
+     *
+     * @return void
      */
     public static function log(string $message, bool $showSource = false): void
+    {
+        self::logDebug('Method ceLTIc\LTI\Util::log has been deprecated; please use ceLTIc\LTI\Util::logMessage instead.', true);
+        self::logMessage($message, LogLevel::None, $showSource);
+    }
+
+    /**
+     * Log an error message irrespective of the logging level.
+     *
+     * @param string $message   Message to be logged
+     * @param LogLevel $type    Type of message to be logged (optional, default is none)
+     * @param bool $showSource  True if the name and line number of the current file are to be included
+     *
+     * @return void
+     */
+    public static function logMessage(string $message, LogLevel $type = LogLevel::None, bool $showSource = false): void
     {
         $source = '';
         if ($showSource) {
@@ -314,7 +395,90 @@ final class Util
                 $source = PHP_EOL . "See: {$source}";
             }
         }
-        error_log($message . $source);
+        $message = $message . $source;
+        $loggerClient = Util::getLoggerClient();
+        if (empty($loggerClient)) {
+            $prefix = match ($type) {
+                LogLevel::Error => '[ERROR] ',
+                LogLevel::Info => '[INFO] ',
+                LogLevel::Debug => '[DEBUG] ',
+                default => ''
+            };
+            error_log($prefix . $message);
+        } else {
+            switch ($type) {
+                case LogLevel::Error:
+                    $loggerClient->error($message);
+                    break;
+                case LogLevel::Info:
+                    $loggerClient->info($message);
+                    break;
+                case LogLevel::Debug:
+                    $loggerClient->debug($message);
+                    break;
+                default:
+                    $loggerClient->notice($message);
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Set the Logger client to use for logging messages.
+     *
+     * @param LoggerInterface|null $loggerClient  Logger client (use null to reset to default)
+     *
+     * @return void
+     */
+    public static function setLoggerClient(?LoggerInterface $loggerClient): void
+    {
+        Util::$loggerClient = $loggerClient;
+        if (!empty($loggerClient)) {
+            Util::logDebug('LoggerClient set to \'' . get_class(self::$loggerClient) . '\'');
+        } else {
+            Util::logDebug('LoggerClient set to use error_log');
+        }
+    }
+
+    /**
+     * Get the Logger client to use for logging messages.
+     *
+     * @return LoggerInterface|null  Logger client
+     */
+    public static function getLoggerClient(): ?LoggerInterface
+    {
+        if (!empty(Util::$loggerClient)) {
+            return Util::$loggerClient;
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Set an error or warning message.
+     *
+     * @param bool $isError    True if the message represents an error
+     * @param string $message  Message
+     *
+     * @return void
+     */
+    public static function setMessage(bool $isError, string $message): void
+    {
+        if (!in_array($message, self::$messages[$isError])) {
+            self::$messages[$isError][] = $message;
+        }
+    }
+
+    /**
+     * Get the system error or warning messages.
+     *
+     * @param bool $isError  True if error messages are to be returned
+     *
+     * @return array  Array of messages
+     */
+    public static function getMessages(bool $isError): array
+    {
+        return self::$messages[$isError];
     }
 
     /**
@@ -390,6 +554,7 @@ EOD;
     <p id="id_newwin_success" style="display: none;">
       Your tool was loaded in a new window.
     </p>
+
 EOD;
         if (!empty($params)) {
             foreach ($params as $key => $value) {
@@ -397,14 +562,14 @@ EOD;
                 if (!is_array($value)) {
                     $value = htmlentities($value, ENT_COMPAT | ENT_HTML401, 'UTF-8');
                     $page .= <<< EOD
-    <input type="hidden" name="{$key}" id="id_{$key}" value="{$value}" />
+    <input type="hidden" name="{$key}" id="id_{$key}" value="{$value}">
 
 EOD;
                 } else {
                     foreach ($value as $element) {
                         $element = htmlentities($element, ENT_COMPAT | ENT_HTML401, 'UTF-8');
                         $page .= <<< EOD
-    <input type="hidden" name="{$key}" value="{$element}" />
+    <input type="hidden" name="{$key}" value="{$element}">
 
 EOD;
                     }
@@ -419,6 +584,44 @@ EOD;
 EOD;
 
         return $page;
+    }
+
+    /**
+     * Send a service response.
+     *
+     * @param string $body           Body of response (default is empty)
+     * @param string $contentType    Content type of response (default is empty)
+     * @param int $statusCode        Status code of response (default is 200)
+     * @param string $statusMessage  Status message of response (default is 'OK')
+     *
+     * @return never
+     */
+    public static function sendResponse(string $body = '', string $contentType = '', int $statusCode = 200,
+        string $statusMessage = 'OK'): never
+    {
+        $status = strval($statusCode);
+        $response = "{$_SERVER['SERVER_PROTOCOL']} {$status} {$statusMessage}";
+        header($response);
+        $response .= "\nDate: " . gmdate(DATE_RFC2822);
+        $response .= "\nServer: " . $_SERVER['SERVER_SOFTWARE'];
+        foreach (headers_list() as $header) {
+            $response .= "\n{$header}";
+        }
+        if (!empty($body)) {
+            if (!empty($contentType)) {
+                $response .= "\nContent-Type: {$contentType}";
+            }
+            $response .= "\nContent-Length: " . strval(strlen($body));
+            $response .= "\n\n";
+            if (!preg_match('/[^\s\x20-\x7e]/', $body)) {
+                $response .= $body;
+            } else {
+                $response .= '<Body contains binary data>';
+            }
+            echo $body;
+        }
+        self::logDebug('Response sent: ' . $response);
+        exit;
     }
 
     /**
@@ -462,6 +665,8 @@ EOD;
      * Set or delete a test cookie.
      *
      * @param bool $delete  True if the cookie is to be deleted (optional, default is false)
+     *
+     * @return void
      */
     public static function setTestCookie(bool $delete = false): void
     {
@@ -472,7 +677,7 @@ EOD;
             $path = parse_url($url, PHP_URL_PATH);
             if (empty($path)) {
                 $path = '/';
-            } elseif (substr($path, -1) === '/') {
+            } elseif (str_ends_with($path, '/')) {
                 $path = substr($path, 0, -1);
             }
             if (!$delete) {
@@ -542,13 +747,401 @@ EOD;
      *
      * @return string
      */
-    public static function urlEncode($val): string
+    public static function urlEncode(?string $val): string
     {
         if (!is_string($val)) {
             $val = strval($val);
         }
 
         return urlencode($val);
+    }
+
+    /**
+     * Convert a value to a string.
+     *
+     * @param mixed $val            The value to be converted
+     * @param string|null $default  Value to return when a conversion is not possible (optional, default is an empty string)
+     *
+     * @return string
+     */
+    public static function valToString(mixed $val, ?string $default = ''): string
+    {
+        if (!is_string($val)) {
+            if (is_bool($val)) {
+                $val = ($val) ? 'true' : 'false';
+            } elseif (is_scalar($val)) {
+                $val = strval($val);
+            } else {
+                $val = $default;
+            }
+        }
+
+        return $val;
+    }
+
+    /**
+     * Convert a value to a numeric.
+     *
+     * @param mixed $val   The value to be converted
+     *
+     * @return int|float|null
+     */
+    public static function valToNumber(mixed $val): int|float|null
+    {
+        if (!is_int($val) && !is_float($val)) {
+            if (!is_numeric($val)) {
+                $val = null;
+            } elseif (strpos($val, '.') === false) {
+                $val = intval($val);
+            } else {
+                $val = floatval($val);
+            }
+        }
+
+        return $val;
+    }
+
+    /**
+     * Convert a value to a boolean.
+     *
+     * @param mixed $val   The value to be converted
+     *
+     * @return bool
+     */
+    public static function valToBoolean(mixed $val): bool
+    {
+        if (!is_bool($val)) {
+            if (($val === 'true' || $val === 1)) {
+                $val = true;
+            } else {
+                $val = false;
+            }
+        }
+
+        return $val;
+    }
+
+    /**
+     * Get the named object element from object.
+     *
+     * @param object $obj         Object containing the element
+     * @param string $fullname    Name of element
+     * @param bool $required      True if the element must be present
+     * @param bool $stringValues  True if the values must be strings
+     *
+     * @return object|null  Value of element (or null if not found)
+     */
+    public static function checkObject(object $obj, string $fullname, bool $required = false, bool $stringValues = false): ?object
+    {
+        $element = null;
+        $name = $fullname;
+        $pos = strrpos($name, '/');
+        if ($pos !== false) {
+            $name = substr($name, $pos + 1);
+        }
+        if (property_exists($obj, $name)) {
+            if (is_object($obj->{$name})) {
+                $element = $obj->{$name};
+                if ($stringValues) {
+                    foreach (get_object_vars($element) as $elementName => $elementValue) {
+                        if (!is_string($elementValue)) {
+                            if (!self::$strictMode) {
+                                self::setMessage(false,
+                                    "Properties of the {$fullname} element should have a string value (" . gettype($elementValue) . ' found)');
+                                $element->{$elementName} = self::valToString($elementValue);
+                            } else {
+                                $element = null;
+                                self::setMessage(true,
+                                    "Properties of the {$fullname} element must have a string value (" . gettype($elementValue) . ' found)');
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                self::setMessage(false, "The '{$fullname}' element must be an object (" . gettype($obj->{$name}) . ' found)');
+            }
+        } elseif ($required) {
+            self::setMessage(true, "The '{$fullname}' element is missing");
+        }
+
+        return $element;
+    }
+
+    /**
+     * Get the named array element from object.
+     *
+     * @param object $obj       Object containing the element
+     * @param string $fullname  Name of element
+     * @param bool $required    True if the element must be present
+     * @param bool $notEmpty    True if the element must not have an empty value
+     *
+     * @return array  Value of element (or empty string if not found)
+     */
+    public static function checkArray(object $obj, string $fullname, bool $required = false, bool $notEmpty = false): array
+    {
+        $arr = [];
+        $name = $fullname;
+        $pos = strrpos($name, '/');
+        if ($pos !== false) {
+            $name = substr($name, $pos + 1);
+        }
+        if (property_exists($obj, $name)) {
+            if (is_array($obj->{$name})) {
+                $arr = $obj->{$name};
+                if ($notEmpty && empty($arr)) {
+                    self::setMessage(true, "The '{$fullname}' element must not be empty");
+                }
+            } elseif (self::$strictMode) {
+                self::setMessage(false, "The '{$fullname}' element must have an array value (" . gettype($obj->{$name}) . ' found)');
+            } else {
+                self::setMessage(false,
+                    "The '{$fullname}' element should have an array value (" . gettype($obj->{$name}) . ' found)');
+                if (is_object($obj->{$name})) {
+                    $arr = (array) $obj->{$name};
+                }
+            }
+        } elseif ($required) {
+            self::setMessage(true, "The '{$fullname}' element is missing");
+        }
+
+        return $arr;
+    }
+
+    /**
+     * Get the named string element from object.
+     *
+     * @param object $obj               Object containing the element
+     * @param string $fullname          Name of element (may include a path)
+     * @param bool $required            True if the element must be present
+     * @param bool|null $notEmpty       True if the element must not have an empty value (use null to issue a warning message when it does)
+     * @param string $fixedValue        Required value of element (empty string if none)
+     * @param bool $overrideStrictMode  Ignore strict mode setting
+     * @param string|null $default      Value to return when a conversion is not possible (optional, default is an empty string)
+     *
+     * @return string  Value of element (or default value if not found or valid)
+     */
+    public static function checkString(object $obj, string $fullname, bool $required = false, ?bool $notEmpty = false,
+        string|array $fixedValue = '', bool $overrideStrictMode = false, ?string $default = ''): ?string
+    {
+        $value = $default;
+        $name = $fullname;
+        $pos = strrpos($name, '/');
+        if ($pos !== false) {
+            $name = substr($name, $pos + 1);
+        }
+        if (property_exists($obj, $name)) {
+            if (is_string($obj->{$name})) {
+                if (!empty($fixedValue) && is_string($fixedValue) && ($obj->{$name} !== $fixedValue)) {
+                    if (self::$strictMode || $overrideStrictMode) {
+                        self::setMessage(true,
+                            "The '{$fullname}' element must have a value of '{$fixedValue}' ('{$obj->{$name}}' found)");
+                    } else {
+                        self::setMessage(false,
+                            "The '{$fullname}' element should have a value of '{$fixedValue}' ('{$obj->{$name}}' found)");
+                    }
+                } elseif (!empty($fixedValue) && is_array($fixedValue) && !in_array($obj->{$name}, $fixedValue)) {
+                    self::setMessage(self::$strictMode || $overrideStrictMode,
+                        "Value of the '{$fullname}' element not recognised ('{$obj->{$name}}' found)");
+                } elseif ($notEmpty && empty($obj->{$name})) {
+                    if (self::$strictMode || $overrideStrictMode) {
+                        self::setMessage(true, "The '{$fullname}' element must not be empty");
+                    } else {
+                        self::setMessage(false, "The '{$fullname}' element should not be empty");
+                    }
+                } else {
+                    $value = $obj->{$name};
+                    if (is_null($notEmpty) && empty($value)) {
+                        self::setMessage(false, "The '{$fullname}' element is empty");
+                    }
+                }
+            } elseif ($required || !is_null($obj->{$name})) {
+                if (self::$strictMode || $overrideStrictMode) {
+                    self::setMessage(true,
+                        "The '{$fullname}' element must have a string value (" . gettype($obj->{$name}) . ' found)');
+                } else {
+                    self::setMessage(false,
+                        "The '{$fullname}' element should have a string value (" . gettype($obj->{$name}) . ' found)');
+                    $value = self::valToString($obj->{$name}, $default);
+                }
+            } else {
+                $value = $default;
+                if (is_null($notEmpty) && empty($value)) {
+                    self::setMessage(false, "The '{$fullname}' element is empty");
+                }
+            }
+        } elseif ($required) {
+            self::setMessage(true, "The '{$fullname}' element is missing");
+        }
+
+        return $value;
+    }
+
+    /**
+     * Get the named filly-qualified URL element from object.
+     *
+     * @param object $obj               Object containing the element
+     * @param string $fullname          Name of element (may include a path)
+     * @param bool $required            True if the element must be present
+     *
+     * @return string  Value of element (or default value if not found or valid)
+     */
+    public static function checkUrl(object $obj, string $fullname, bool $required = false): ?string
+    {
+        $value = self::checkString($obj, $fullname, $required);
+        if (is_string($value) && (strpos($value, 'http://') !== 0) && (strpos($value, 'https://') !== 0)) {
+            $value = null;
+            self::setMessage(true, "The '{$fullname}' element must be a fully-qualified URL");
+        }
+
+        return $value;
+    }
+
+    /**
+     * Get the named number element from object.
+     *
+     * @param object $obj               Object containing the element
+     * @param string $fullname          Name of element (may include a path)
+     * @param bool $required            True if the element must be present
+     * @param int|false $minimum        Minimum value (or false is none)
+     * @param bool $minimumExclusive    True if value must exceed the minimum
+     * @param bool $overrideStrictMode  Ignore strict mode setting
+     *
+     * @return int|float|null  Value of element (or null if not found or valid)
+     */
+    public static function checkNumber(object $obj, string $fullname, bool $required = false, int|false $minimum = false,
+        bool $minimumExclusive = false, bool $overrideStrictMode = false): int|float|null
+    {
+        $value = null;
+        $name = $fullname;
+        $pos = strrpos($name, '/');
+        if ($pos !== false) {
+            $name = substr($name, $pos + 1);
+        }
+        if (property_exists($obj, $name)) {
+            $num = self::valToNumber($obj->{$name});
+            if (!is_null($num)) {
+                if (($minimum !== false) && !$minimumExclusive && ($num < $minimum)) {
+                    self::setMessage(true, "The '{$fullname}' element must have a numeric value of at least {$minimum}");
+                } elseif (($minimum !== false) && $minimumExclusive && ($num <= $minimum)) {
+                    self::setMessage(true, "The '{$fullname}' element must have a numeric value greater than {$minimum}");
+                } else {
+                    $value = $num;
+                }
+            }
+            if (is_null($num) || (!is_null($value) && ($obj->{$name} !== $value))) {
+                if (($required && is_null($value)) || self::$strictMode || $overrideStrictMode) {
+                    self::setMessage(true,
+                        "The '{$fullname}' element must have a numeric value (" . gettype($obj->{$name}) . ' found)');
+                    $value = null;
+                } else {
+                    self::setMessage(false,
+                        "The '{$fullname}' element should have a numeric value (" . gettype($obj->{$name}) . ' found)');
+                }
+            }
+        } elseif ($required) {
+            self::setMessage(true, "The '{$fullname}' element is missing");
+        }
+
+        return $value;
+    }
+
+    /**
+     * Get the named integer element from object.
+     *
+     * @param object $obj               Object containing the element
+     * @param string $fullname          Name of element (may include a path)
+     * @param bool $required            True if the element must be present
+     * @param int|false $minimum        Minimum value (or false is none)
+     * @param bool $minimumExclusive    True if value must exceed the minimum
+     * @param bool $overrideStrictMode  Ignore strict mode setting
+     *
+     * @return int|null  Value of element (or null if not found or valid)
+     */
+    public static function checkInteger(object $obj, string $fullname, bool $required = false, int|false $minimum = false,
+        bool $minimumExclusive = false, bool $overrideStrictMode = false): int|null
+    {
+        $value = self::checkNumber($obj, $fullname, $required, $minimum, $minimumExclusive, $overrideStrictMode);
+        if (is_float($value)) {
+            if (self::$strictMode) {
+                self::setMessage(true, "The '{$fullname}' element must have an integer value");
+                $value = null;
+            } else {
+                self::setMessage(false, "The '{$fullname}' element should have an integer value");
+                $value = intval($value);
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Get the named boolean element from object.
+     *
+     * @param object $obj           Object containing the element
+     * @param string $fullname      Name of element (may include a path)
+     * @param bool $required        True if the element must be present
+     * @param string|null $default  Value to return when a conversion is not possible (optional, default is an empty string)
+     *
+     * @return bool|null  Value of element (or null if not found or valid)
+     */
+    public static function checkBoolean(object $obj, string $fullname, bool $required = false, ?bool $default = null): ?bool
+    {
+        $value = $default;
+        $name = $fullname;
+        $pos = strrpos($name, '/');
+        if ($pos !== false) {
+            $name = substr($name, $pos + 1);
+        }
+        if (property_exists($obj, $name)) {
+            if (is_bool($obj->{$name})) {
+                $value = $obj->{$name};
+            } elseif (!self::$strictMode) {
+                self::setMessage(false,
+                    "The '{$fullname}' element should have a boolean value (" . gettype($obj->{$name}) . ' found)');
+                $value = self::valToBoolean($obj->{$name});
+            } else {
+                self::setMessage(true, "The '{$fullname}' element must have a boolean value (" . gettype($obj->{$name}) . ' found)');
+            }
+        } elseif ($required) {
+            self::setMessage(true, "The '{$fullname}' element is missing");
+        }
+
+        return $value;
+    }
+
+    /**
+     * Get the named number element from object.
+     *
+     * @param object $obj       Object containing the element
+     * @param string $fullname  Name of element (may include a path)
+     * @param bool $required    True if the element must be present
+     *
+     * @return int  Value of element (or 0 if not found or valid)
+     */
+    public static function checkDateTime(object $obj, string $fullname, bool $required = false): int
+    {
+        $value = 0;
+        $name = $fullname;
+        $pos = strrpos($name, '/');
+        if ($pos !== false) {
+            $name = substr($name, $pos + 1);
+        }
+        if (property_exists($obj, $name)) {
+            if (is_string($obj->{$name})) {
+                $value = strtotime($obj->{$name});
+                if ($value === false) {
+                    self::setMessage(true, "The '{$fullname}' element must have a datetime value");
+                    $value = 0;
+                }
+            } else {
+                self::setMessage(true, "The '{$fullname}' element must have a string value (" . gettype($obj->{$name}) . ' found)');
+            }
+        } elseif ($required) {
+            self::setMessage(true, "The '{$fullname}' element is missing");
+        }
+
+        return $value;
     }
 
     /**
@@ -584,7 +1177,7 @@ EOD;
         foreach ($objVars as $attrName => $attrValue) {
             if (is_object($clone->$attrName)) {
                 $clone->$attrName = self::cloneObject($clone->$attrName);
-            } else if (is_array($clone->$attrName)) {
+            } elseif (is_array($clone->$attrName)) {
                 foreach ($clone->$attrName as &$attrArrayValue) {
                     if (is_object($attrArrayValue)) {
                         $attrArrayValue = self::cloneObject($attrArrayValue);

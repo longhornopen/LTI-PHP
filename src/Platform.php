@@ -9,6 +9,9 @@ use ceLTIc\LTI\Http\HttpMessage;
 use ceLTIc\LTI\Enum\IdScope;
 use ceLTIc\LTI\Enum\LogLevel;
 use ceLTIc\LTI\ApiHook\ApiHook;
+use ceLTIc\LTI\Content\Item;
+use ceLTIc\LTI\OAuth;
+use ceLTIc\LTI\Jwt\Jwt;
 use Illuminate\Support\Facades\Session;
 
 /**
@@ -39,6 +42,13 @@ class Platform
      * @var string|null $browserStorageFrame
      */
     public static ?string $browserStorageFrame = null;
+
+    /**
+     * Life (in seconds) of an issued access token (default is 1 hour).
+     *
+     * @var int $accessTokenLife
+     */
+    public static $accessTokenLife = 3600;
 
     /**
      * Platform ID.
@@ -168,6 +178,8 @@ class Platform
 
     /**
      * Initialise the platform.
+     *
+     * @return void
      */
     public function initialize(): void
     {
@@ -205,6 +217,8 @@ class Platform
      * Initialise the platform.
      *
      * Synonym for initialize().
+     *
+     * @return void
      */
     public function initialise(): void
     {
@@ -300,6 +314,8 @@ class Platform
      * Set the authorization access token
      *
      * @param AccessToken $accessToken  Access token
+     *
+     * @return void
      */
     public function setAccessToken(AccessToken $accessToken): void
     {
@@ -419,12 +435,12 @@ class Platform
     /**
      * Get the message parameters
      *
-     * @return array  The message parameter array
+     * @return array|null  The message parameter array
      */
-    public function getMessageParameters(): array
+    public function getMessageParameters(): ?array
     {
         if ($this->ok && is_null($this->messageParameters)) {
-            $this->parseMessage(true, true, false);
+            $this->parseMessage(true, false);
         }
 
         return $this->messageParameters;
@@ -432,8 +448,12 @@ class Platform
 
     /**
      * Process an incoming request
+     *
+     * @param bool $generateWarnings    True if warning messages should be generated (optional, default is false)
+     *
+     * @return void
      */
-    public function handleRequest(): void
+    public function handleRequest(bool $generateWarnings = false): void
     {
         $parameters = Util::getRequestParameters();
         if ($this->debugMode) {
@@ -446,7 +466,10 @@ class Platform
             } else {  // LTI message
                 $this->getMessageParameters();
                 Util::logRequest();
-                if ($this->ok && $this->authenticate()) {
+                if ($this->ok) {
+                    $this->authenticate($generateWarnings);
+                }
+                if ($this->ok) {
                     $this->doCallback();
                 }
             }
@@ -464,6 +487,90 @@ class Platform
             }
             Util::logError($errorMessage);
         }
+    }
+
+    /**
+     * Generate an access token value.
+     *
+     * @param array $supportedScopes  Supported scopes
+     *
+     * @return never
+     */
+    public function sendAccessToken($supportedScopes): never
+    {
+        $scopesRequested = explode(' ',
+            OAuth\OAuthUtil::parse_parameters(file_get_contents(OAuth\OAuthRequest::$POST_INPUT))['scope']);
+        $scopesPermitted = array();
+        foreach ($scopesRequested as $scope) {
+            if (in_array($scope, $supportedScopes)) {
+                $scopesPermitted[] = $scope;
+            }
+        }
+        if (!empty($scopesPermitted)) {
+            $life = static::$accessTokenLife;
+            $scopes = implode(' ', array_unique($scopesPermitted));
+            $payload['sub'] = $this->clientId;
+            $payload['iat'] = time();
+            $payload['exp'] = $payload['iat'] + $life;
+            $payload['imsglobal.org.security.scope'] = $scopes;
+            try {
+                $jwt = Jwt::getJwtClient();
+                $tokenValue = $jwt::sign($payload, $this->signatureMethod, $this->rsaKey);
+                $body = <<< EOD
+{
+  "access_token" : "{$tokenValue}",
+  "token_type" : "bearer",
+  "expires_in" : {$life},
+  "scope" : "{$scopes}"
+}
+EOD;
+                Util::sendResponse($body, 'Content-Type: application/json; charset=utf-8');
+            } catch (\Exception $e) {
+                $reason = $e->getMessage();
+                if (empty($reason)) {
+                    $reason = 'System Error';
+                }
+            }
+        } else {
+            $reason = 'No valid scope requested';
+        }
+        Util::sendResponse('', '', 400, $reason);
+    }
+
+    /**
+     * Verify the authorisation of a service request.
+     *
+     * array $allowedScopes  Array of scopes at least one of which is required to authorise the request (passed by reference)
+     *
+     * @return bool  True if the request is authorised
+     */
+    public function verifyAuthorization(array &$allowedSscopes): bool
+    {
+        $requestHeaders = OAuth\OAuthUtil::get_headers();
+        $ok = isset($requestHeaders['Authorization']);
+        if ($ok) {
+            $authHeader = strtolower($requestHeaders['Authorization']);
+            if (str_starts_with($authHeader, 'bearer ')) {  // Access token
+                $token = trim(substr($requestHeaders['Authorization'], 7));
+                $jwt = Jwt::getJwtClient();
+                $ok = $jwt->load($token);
+                if ($ok) {
+                    $publicKey = $jwt->getPublicKey($this->rsaKey);
+                    $ok = $jwt->verifySignature($publicKey);
+                }
+                if ($ok) {
+                    $scopes = explode(' ', $jwt->getClaim('imsglobal.org.security.scope'));
+                    $allowedSscopes = \array_intersect($allowedSscopes, $scopes);
+                    $ok = !empty($allowedSscopes);
+                }
+            } elseif (str_starts_with($authHeader, 'oauth ')) {  // OAuth 1
+                $ok = $this->verifySignature();
+            } else {  // Unsupported type of Authorization header
+                $ok = false;
+            }
+        }
+
+        return $ok;
     }
 
     /**
@@ -501,7 +608,7 @@ class Platform
      * @return Platform  The platform object
      */
     public static function fromPlatformId(string $platformId, ?string $clientId, ?string $deploymentId,
-        DataConnector $dataConnector = null, bool $autoEnable = false): Platform
+        ?DataConnector $dataConnector = null, bool $autoEnable = false): Platform
     {
         $platform = new static($dataConnector);
         $platform->platformId = $platformId;
@@ -546,7 +653,7 @@ class Platform
 
   window.addEventListener('message', function (event) {
     let ok = true;
-    if (typeof event.data !== "object") {
+    if (typeof event.data !== 'object') {
       ok = false;
       event.source.postMessage({
         subject: '.response',
@@ -695,6 +802,8 @@ EOD;
      * @param string $loginHint            The ID of the user
      * @param string|null $ltiMessageHint  The message hint being sent to the tool
      * @param array $params                An associative array of message parameters
+     *
+     * @return void
      */
     protected function onInitiateLogin(string &$url, string &$loginHint, ?string &$ltiMessageHint, array $params): void
     {
@@ -710,6 +819,8 @@ EOD;
      * Check the hint and recover the message parameters for an authentication request.
      *
      * Override this method if the data has been saved elsewhere.
+     *
+     * @return void
      */
     protected function onAuthenticate(): void
     {
@@ -730,24 +841,30 @@ EOD;
 
     /**
      * Process a valid content-item message
+     *
+     * @return void
      */
     protected function onContentItem(): void
     {
-        $this->reason = 'No onContentItem method found for platform';
+        $this->setReason('No onContentItem method found for platform');
         $this->onError();
     }
 
     /**
      * Process a valid start assessment message
+     *
+     * @return void
      */
     protected function onLtiStartAssessment(): void
     {
-        $this->reason = 'No onLtiStartAssessment method found for platform';
+        $this->setReason('No onLtiStartAssessment method found for platform');
         $this->onError();
     }
 
     /**
      * Process a response to an invalid message
+     *
+     * @return void
      */
     protected function onError(): void
     {
@@ -763,16 +880,36 @@ EOD;
      *
      * The platform, resource link and user objects will be initialised if the request is valid.
      *
-     * @return bool  True if the request has been successfully validated.
+     * @param bool $generateWarnings    True if warning messages should be generated (optional, default is false)
+     *
+     * @return void
      */
-    private function authenticate(): bool
+    private function authenticate(bool $generateWarnings = false): void
     {
-        $this->ok = $this->checkMessage();
-        if ($this->ok) {
-            $this->ok = $this->verifySignature();
+        $this->checkMessage($generateWarnings);
+        if (($this->ok || $generateWarnings) && !empty($this->messageParameters['lti_message_type'])) {
+            if ($this->messageParameters['lti_message_type'] === 'ContentItemSelection') {
+                if (isset($this->messageParameters['content_items'])) {
+                    $value = Util::jsonDecode($this->messageParameters['content_items']);
+                    if (is_null($value)) {
+                        $this->setReason('Invalid JSON in \'content_items\' parameter');
+                    } elseif (empty($this->jwt) || !$this->jwt->hasJwt()) {
+                        if (is_object($value)) {
+                            Item::fromJson($value);
+                        } else {
+                            $this->setReason('\'content_items\' parameter must be an object');
+                        }
+                    } elseif (is_array($value)) {
+                        Item::fromJson($value);
+                    } else {
+                        $this->setReason('\'content_items\' parameter must be an array');
+                    }
+                }
+            }
         }
-
-        return $this->ok;
+        if ($this->ok) {
+            $this->verifySignature();
+        }
     }
 
     /**
@@ -835,8 +972,17 @@ EOD;
             $this->onAuthenticate();
         }
         if ($this->ok) {
+            $this->ok = is_string(Tool::$defaultTool->messageUrl);
+        }
+        if ($this->ok) {
             $this->messageParameters = $this->addSignature(Tool::$defaultTool->messageUrl, $this->messageParameters, 'POST', null,
                 $parameters['nonce']);
+            if (!$this->ok) {
+                $this->messageParameters['error'] = 'Unable to sign message';
+                if (!empty($this->reason)) {
+                    $this->messageParameters['error_description'] = $this->reason;
+                }
+            }
         }
         if (isset($parameters['state'])) {
             $this->messageParameters['state'] = $parameters['state'];
@@ -849,8 +995,12 @@ EOD;
             }
             $parameters['redirect_uri'] .= "{$sep}lti_storage_target=" . static::$browserStorageFrame;
         }
-        $html = Util::sendForm($parameters['redirect_uri'], $this->messageParameters);
-        echo $html;
+        if (isset($parameters['redirect_uri'])) {
+            $html = Util::sendForm($parameters['redirect_uri'], $this->messageParameters);
+            echo $html;
+        } else {
+            http_response_code(400);
+        }
         exit;
     }
 

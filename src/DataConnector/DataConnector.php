@@ -123,7 +123,7 @@ class DataConnector
      *
      * @return bool  True if memcache is enabled
      */
-    public static function useMemcache(string $host = null, int $port = -1): bool
+    public static function useMemcache(?string $host = null, int $port = -1): bool
     {
         if (is_null($host)) {
             $useMemcache = !empty(self::$memcache);
@@ -681,6 +681,8 @@ class DataConnector
      *
      * @param Platform $platform  Platform object
      * @param bool     $isSave    True if the settings are being saved
+     *
+     * @return void
      */
     protected function fixPlatformSettings(Platform $platform, bool $isSave): void
     {
@@ -717,6 +719,8 @@ class DataConnector
      *
      * @param Tool $tool    Tool object
      * @param bool $isSave  True if the settings are being saved
+     *
+     * @return void
      */
     protected function fixToolSettings(Tool $tool, bool $isSave): void
     {

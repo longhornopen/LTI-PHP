@@ -20,6 +20,16 @@ class ToolSettings extends Service
 {
 
     /**
+     * Media type for tool settings service.
+     */
+    public const MEDIA_TYPE_TOOL_SETTINGS = 'application/vnd.ims.lti.v2.toolsettings+json';
+
+    /**
+     * Media type for tool settings simple service.
+     */
+    public const MEDIA_TYPE_TOOL_SETTINGS_SIMPLE = 'application/vnd.ims.lti.v2.toolsettings.simple+json';
+
+    /**
      * Access scope.
      *
      * @var string $SCOPE
@@ -68,9 +78,9 @@ class ToolSettings extends Service
         parent::__construct($platform, $endpoint);
         $this->scope = self::$SCOPE;
         if ($simple) {
-            $this->mediaType = 'application/vnd.ims.lti.v2.toolsettings.simple+json';
+            $this->mediaType = self::MEDIA_TYPE_TOOL_SETTINGS_SIMPLE;
         } else {
-            $this->mediaType = 'application/vnd.ims.lti.v2.toolsettings+json';
+            $this->mediaType = self::MEDIA_TYPE_TOOL_SETTINGS;
         }
         $this->source = $source;
         $this->simple = $simple;
@@ -85,21 +95,55 @@ class ToolSettings extends Service
      */
     public function get(?ToolSettingsMode $mode = null): array|bool
     {
+        $response = false;
         $parameter = [];
         if (!empty($mode)) {
             $parameter['bubble'] = $mode->value;
         }
         $http = $this->send('GET', $parameter);
-        if (!$http->ok) {
-            $response = false;
-        } elseif ($this->simple) {
-            $response = Util::jsonDecode($http->response, true);
-        } elseif (isset($http->responseJson->{'@graph'})) {
-            $response = [];
-            foreach ($http->responseJson->{'@graph'} as $level) {
-                $settings = Util::jsonDecode(json_encode($level->custom), true);
-                unset($settings['@id']);
-                $response[self::$LEVEL_NAMES[$level->{'@type'}]] = $settings;
+        if ($http->ok) {
+            if ($this->simple) {
+                if (!is_object($http->responseJson)) {
+                    Util::setMessage(true, 'The response must be an object');
+                    $response = false;
+                } else {
+                    $response = Util::jsonDecode(json_encode($http->responseJson), true);
+                    if (is_array($response)) {
+                        $response = $this->checkSettings($response);
+                    } else {
+                        Util::setMessage(true, 'The response must be a simple object');
+                        $response = false;
+                    }
+                }
+            } else {
+                $graph = Util::checkArray($http->responseJson, '@graph', true, true);
+                if (!empty($graph)) {
+                    $response = [];
+                    foreach ($graph as $level) {
+                        $settings = [];
+                        if (isset($level->custom)) {
+                            if (!is_object($level->custom)) {
+                                Util::setMessage(true, 'The custom element must be an object');
+                                $response = false;
+                            } else {
+                                $settings = Util::jsonDecode(json_encode($level->custom), true);
+                                if (is_array($settings)) {
+                                    unset($settings['@id']);
+                                    $settings = $this->checkSettings($settings);
+                                    if ($settings === false) {
+                                        $response = false;
+                                    }
+                                } else {
+                                    Util::setMessage(true, 'The custom element must be a simple object');
+                                    $response = false;
+                                }
+                            }
+                        }
+                        if ($response !== false) {
+                            $response[self::$LEVEL_NAMES[$level->{'@type'}]] = $settings;
+                        }
+                    }
+                }
             }
         }
 
@@ -116,9 +160,9 @@ class ToolSettings extends Service
     public function set(array $settings): bool
     {
         if (!$this->simple) {
-            if (is_a($this->source, 'Platform')) {
+            if (is_a($this->source, 'ceLTIc\LTI\Platform')) {
                 $type = 'ToolProxy';
-            } elseif (is_a($this->source, 'Context')) {
+            } elseif (is_a($this->source, 'ceLTIc\LTI\Context')) {
                 $type = 'ToolProxyBinding';
             } else {
                 $type = 'LtiLink';
@@ -140,6 +184,40 @@ class ToolSettings extends Service
         $response = parent::send('PUT', null, $body);
 
         return $response->ok;
+    }
+
+###
+###  PRIVATE METHODS
+###
+
+    /**
+     * Check the tool setting values.
+     *
+     * @param array $settings  An associative array of settings
+     *
+     * @return array|false  Array of settings, or false if an invalid value is found
+     */
+    private function checkSettings(array $settings): array|false
+    {
+        $response = [];
+        foreach ($settings as $key => $value) {
+            if (is_string($value)) {
+                if ($response !== false) {
+                    $response[$key] = $value;
+                }
+            } elseif (!Util::$strictMode) {
+                Util::setMessage(false,
+                    'Properties of the custom element should have a string value (' . gettype($value) . ' found)');
+                if ($response !== false) {
+                    $response[$key] = Util::valToString($value);
+                }
+            } else {
+                Util::setMessage(true, 'Properties of the custom element must have a string value (' . gettype($value) . ' found)');
+                $response = false;
+            }
+        }
+
+        return $response;
     }
 
 }

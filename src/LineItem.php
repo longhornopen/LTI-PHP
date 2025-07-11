@@ -79,6 +79,13 @@ class LineItem
     public ?SubmissionReview $submissionReview = null;
 
     /**
+     * Grades should be released.
+     *
+     * @var bool|null $gradesReleased
+     */
+    public ?bool $gradesReleased = null;
+
+    /**
      * Platform for this line-item.
      *
      * @var Platform|null $platform
@@ -195,7 +202,9 @@ class LineItem
      */
     public static function fromEndpoint(Platform $platform, string $endpoint): LineItem|bool
     {
-        return Service\LineItem::getLineItem($platform, $endpoint);
+        $lineItemService = new Service\LineItem($platform, $endpoint);
+
+        return $lineItemService->get();
     }
 
 }

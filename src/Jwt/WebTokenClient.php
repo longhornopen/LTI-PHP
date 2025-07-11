@@ -112,13 +112,17 @@ class WebTokenClient implements ClientInterface
             $this->jwt = $serializer->unserialize($jwtString);
         } catch (\Exception $e) {
             $ok = false;
+        } catch (\TypeError $e) {
+            $ok = false;
         }
         if (!$ok) {
             try {
                 $serializer = new Encryption\Serializer\CompactSerializer();
-                $this->jwt = $serializer->unserialize($jwtString);
+                $this->jwe = $serializer->unserialize($jwtString);
                 $ok = $this->decrypt($privateKey);
             } catch (\Exception $e) {
+                $ok = false;
+            } catch (\TypeError $e) {
                 $ok = false;
             }
         }
@@ -185,9 +189,9 @@ class WebTokenClient implements ClientInterface
     /**
      * Get the value of the headers.
      *
-     * @return array  The value of the headers
+     * @return array|object|null  The value of the headers
      */
-    public function getHeaders(): array|object
+    public function getHeaders(): array|object|null
     {
         $headers = null;
         if ($this->jwt instanceof Signature\JWS) {
@@ -200,9 +204,9 @@ class WebTokenClient implements ClientInterface
     /**
      * Get the value of the headers for the last signed JWT (before any encryption).
      *
-     * @return array  The value of the headers
+     * @return array|object|null  The value of the headers
      */
-    public static function getLastHeaders(): array
+    public static function getLastHeaders(): array|object|null
     {
         return self::$lastHeaders;
     }
@@ -222,12 +226,12 @@ class WebTokenClient implements ClientInterface
     /**
      * Get the value of the claim with the specified name.
      *
-     * @param string $name                                     Claim name
-     * @param int|string|bool|array|object|null $defaultValue  Default value
+     * @param string $name                                           Claim name
+     * @param int|float|string|bool|array|object|null $defaultValue  Default value
      *
-     * @return int|string|bool|array|object|null  The value of the claim with the specified name, or the default value if it does not exist
+     * @return int|float|string|bool|array|object|null  The value of the claim with the specified name, or the default value if it does not exist
      */
-    public function getClaim(string $name, int|string|bool|array|object|null $defaultValue = null): int|string|bool|array|object|null
+    public function getClaim(string $name, int|float|string|bool|array|object|null $defaultValue = null): int|float|string|bool|array|object|null
     {
         if ($this->hasClaim($name)) {
             $value = $this->claims->{$name};
@@ -241,9 +245,9 @@ class WebTokenClient implements ClientInterface
     /**
      * Get the value of the payload.
      *
-     * @return array  The value of the payload
+     * @return array|object|null  The value of the payload
      */
-    public function getPayload(): array|object
+    public function getPayload(): array|object|null
     {
         return $this->claims;
     }
@@ -251,9 +255,9 @@ class WebTokenClient implements ClientInterface
     /**
      * Get the value of the payload for the last signed JWT (before any encryption).
      *
-     * @return array  The value of the payload
+     * @return array|object|null  The value of the payload
      */
-    public static function getLastPayload(): array
+    public static function getLastPayload(): array|object|null
     {
         return self::$lastPayload;
     }
@@ -261,12 +265,31 @@ class WebTokenClient implements ClientInterface
     /**
      * Verify the signature of the JWT.
      *
+     * @deprecated Use verifySignature() instead
+     *
      * @param string|null $publicKey  Public key of issuer
      * @param string|null $jku        JSON Web Key URL of issuer (optional)
      *
      * @return bool  True if the JWT has a valid signature
      */
     public function verify(?string $publicKey, ?string $jku = null): bool
+    {
+        Util::logDebug('Method ceLTIc\LTI\Jwt\WebTokenClient->verify has been deprecated; please use ceLTIc\LTI\Jwt\WebTokenClient->verifySignature instead.',
+            true);
+        return $this->verifySignature($publicKey, $jku);
+    }
+
+    /**
+     * Verify the signature of the JWT.
+     *
+     * If a new public key is fetched and used to successfully verify the signature, the value of the publicKey parameter is updated.
+     *
+     * @param string|null $publicKey  Public key of issuer (passed by reference)
+     * @param string|null $jku        JSON Web Key URL of issuer (optional)
+     *
+     * @return bool  True if the JWT has a valid signature
+     */
+    public function verifySignature(?string &$publicKey, ?string $jku = null): bool
     {
         $ok = false;
         $hasPublicKey = !empty($publicKey);
@@ -302,14 +325,19 @@ class WebTokenClient implements ClientInterface
                             }
                             $jwks = $this->fetchPublicKey($jwksUrl, $this->getHeader('kid'));
                             $ok = $jwsVerifier->verifyWithKeySet($this->jwt, $jwks, 0);
-                        } else {
-                            $json = Util::jsonDecode($publicKey, true);
+                            if ($ok) {
+                                $publicKey = json_encode($jwks->get($this->getHeader('kid'))->all());
+                            }
+                        } elseif (!empty($publicKey)) {
+                            $json = Util::jsonDecode($publicKey, true);  // Check if public key is in PEM or JWK format
                             if (is_null($json)) {
                                 $jwk = self::getJwk($publicKey, ['alg' => $this->getHeader('alg'), 'use' => 'sig']);
                             } else {
                                 $jwk = new Core\JWK($json);
                             }
                             $ok = $jwsVerifier->verifyWithKey($this->jwt, $jwk, 0);
+                        } else {
+                            $ok = false;
                         }
                         break;
                 }
@@ -433,9 +461,9 @@ class WebTokenClient implements ClientInterface
      *
      * @param string $privateKey  Private key in PEM format
      *
-     * @return string  Public key in PEM format
+     * @return string|null  Public key in PEM format
      */
-    public static function getPublicKey(string $privateKey): string
+    public static function getPublicKey(string $privateKey): ?string
     {
         return FirebaseClient::getPublicKey($privateKey);
     }
@@ -483,8 +511,7 @@ class WebTokenClient implements ClientInterface
     private function decrypt(string $privateKey): bool
     {
         $ok = false;
-        if ($this->jwt instanceof Encryption\JWE) {
-            $this->jwe = clone $this->jwt;
+        if ($this->jwe) {
             $keyEnc = $this->jwe->getSharedProtectedHeaderParameter('alg');
             $jwk = KeyManagement\JWKFactory::createFromKey($privateKey, null, ['alg' => $keyEnc, 'use' => 'enc']);
             $keyEncryptionAlgorithmManager = new Core\AlgorithmManager([new Encryption\Algorithm\KeyEncryption\RSAOAEP256()]);
@@ -498,9 +525,9 @@ class WebTokenClient implements ClientInterface
             $compressionMethodManager = new Encryption\Compression\CompressionMethodManager([new Encryption\Compression\Deflate()]);
             $jweDecrypter = new Encryption\JWEDecrypter($keyEncryptionAlgorithmManager, $contentEncryptionAlgorithmManager,
                 $compressionMethodManager);
-            if ($jweDecrypter->decryptUsingKey($this->jwt, $jwk, 0)) {
+            if ($jweDecrypter->decryptUsingKey($this->jwe, $jwk, 0)) {
                 try {
-                    $jwt = $this->jwt->getPayload();
+                    $jwt = $this->jwe->getPayload();
                     $serializer = new Signature\Serializer\CompactSerializer();
                     $this->jwt = $serializer->unserialize($jwt);
                     $ok = true;

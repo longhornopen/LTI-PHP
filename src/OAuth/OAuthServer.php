@@ -55,6 +55,8 @@ class OAuthServer
      * Add a signature method.
      *
      * @param OAuthSignatureMethod $signature_method  Signature method
+     *
+     * @return void
      */
     public function add_signature_method(OAuthSignatureMethod $signature_method): void
     {
@@ -155,7 +157,7 @@ class OAuthServer
             $version = '1.0';
         }
         if ($version !== $this->version) {
-            throw new OAuthException("OAuth version '{$version}' not supported");
+            throw new OAuthException('OAuth version ' . var_export($version, true) . ' not supported');
         }
 
         return $version;
@@ -180,9 +182,9 @@ class OAuthServer
         }
 
         if (!in_array($signature_method, array_keys($this->signature_methods))) {
-            throw new OAuthException("Signature method '{$signature_method}' not supported " .
+            throw new OAuthException('Signature method ' . var_export($signature_method, true) . ' not supported ' .
                     'try one of the following: ' . implode(', ', array_keys($this->signature_methods))
-            );
+                );
         }
 
         return $this->signature_methods[$signature_method];
@@ -226,9 +228,9 @@ class OAuthServer
     {
         $token_field = $request instanceof OAuthRequest ? $request->get_parameter('oauth_token') : null;
 
-        $token = $this->data_store->lookup_token($consumer, $token_type, $token_field);
+        $token = $this->data_store->lookup_token($consumer, $token_type, is_string($token_field) ? $token_field : '');
         if (!$token) {
-            throw new OAuthException("Invalid $token_type token: {$token_field}");
+            throw new OAuthException("Invalid {$token_type} token: " . var_export($token_field, true));
         }
 
         return $token;
@@ -240,6 +242,8 @@ class OAuthServer
      * @param OAuthRequest $request    Request
      * @param OAuthConsumer $consumer  Consumer
      * @param OAuthToken $token        Token
+     *
+     * @return void
      * @throws OAuthException
      */
     private function check_signature(OAuthRequest $request, OAuthConsumer $consumer, OAuthToken $token): void
@@ -248,8 +252,16 @@ class OAuthServer
         $timestamp = $request instanceof OAuthRequest ? $request->get_parameter('oauth_timestamp') : null;
         $nonce = $request instanceof OAuthRequest ? $request->get_parameter('oauth_nonce') : null;
 
-        $this->check_timestamp($timestamp);
-        $this->check_nonce($consumer, $token, $nonce, $timestamp);
+        if (is_string($timestamp)) {
+            $this->check_timestamp($timestamp);
+        } else {
+            throw new OAuthException('Invalid timestamp parameter: ' . var_export($timestamp, true));
+        }
+        if (is_string($nonce)) {
+            $this->check_nonce($consumer, $token, $nonce, $timestamp);
+        } else {
+            throw new OAuthException('Invalid nonce parameter: ' . var_export($nonce, true));
+        }
 
         $signature_method = $this->get_signature_method($request);
 
@@ -265,12 +277,15 @@ class OAuthServer
      * Check that the timestamp is new enough.
      *
      * @param string|null $timestamp  Timestamp
+     *
+     * @return void
      * @throws OAuthException
      */
     private function check_timestamp(?string $timestamp): void
     {
-        if (!$timestamp)
+        if (!$timestamp) {
             throw new OAuthException('Missing timestamp parameter. The parameter is required');
+        }
 
         // verify that timestamp is recentish
         $now = time();
@@ -286,12 +301,15 @@ class OAuthServer
      * @param OAuthToken $token        Token
      * @param string|null $nonce       Nonce value
      * @param string|null $timestamp   Timestamp
+     *
+     * @return void
      * @throws OAuthException
      */
     private function check_nonce(OAuthConsumer $consumer, OAuthToken $token, ?string $nonce, ?string $timestamp): void
     {
-        if (!$nonce)
+        if (!$nonce) {
             throw new OAuthException('Missing nonce parameter. The parameter is required');
+        }
 
         // verify that the nonce is uniqueish
         $found = $this->data_store->lookup_nonce($consumer, $token, $nonce, $timestamp);
