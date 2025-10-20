@@ -232,7 +232,12 @@ class Platform
      */
     public function save(): bool
     {
-        return $this->dataConnector->savePlatform($this);
+        $secret = $this->secret;
+        $this->secret = Util::encrypt($secret, DataConnector::$maximumSecretLength);
+        $ok = $this->dataConnector->savePlatform($this);
+        $this->secret = $secret;
+
+        return $ok;
     }
 
     /**
@@ -415,7 +420,12 @@ class Platform
      */
     public function getTools(): array
     {
-        return $this->dataConnector->getTools();
+        $tools = $this->dataConnector->getTools();
+        foreach ($tools as $tool) {
+            $tool->secret = Util::decrypt($tool->secret);
+        }
+
+        return $tools;
     }
 
     /**
@@ -524,7 +534,9 @@ class Platform
   "scope" : "{$scopes}"
 }
 EOD;
+                $this->ok = true;
                 Util::sendResponse($body, 'Content-Type: application/json; charset=utf-8');
+                $this->doExit();
             } catch (\Exception $e) {
                 $reason = $e->getMessage();
                 if (empty($reason)) {
@@ -534,7 +546,9 @@ EOD;
         } else {
             $reason = 'No valid scope requested';
         }
+        $this->ok = false;
         Util::sendResponse('', '', 400, $reason);
+        $this->doExit();
     }
 
     /**
@@ -586,9 +600,9 @@ EOD;
     {
         $platform = new static($dataConnector);
         $platform->key = $key;
-        if (!empty($dataConnector)) {
-            $ok = $dataConnector->loadPlatform($platform);
-            if ($ok && $autoEnable) {
+        if (!empty($dataConnector) && $dataConnector->loadPlatform($platform)) {
+            $platform->secret = Util::decrypt($platform->secret);
+            if ($autoEnable) {
                 $platform->enabled = true;
             }
         }
@@ -614,7 +628,8 @@ EOD;
         $platform->platformId = $platformId;
         $platform->clientId = $clientId;
         $platform->deploymentId = $deploymentId;
-        if ($dataConnector->loadPlatform($platform)) {
+        if (!empty($dataConnector) && $dataConnector->loadPlatform($platform)) {
+            $platform->secret = Util::decrypt($platform->secret);
             if ($autoEnable) {
                 $platform->enabled = true;
             }
@@ -636,6 +651,7 @@ EOD;
         $platform = new static($dataConnector);
         $platform->setRecordId($id);
         $dataConnector->loadPlatform($platform);
+        $platform->secret = Util::decrypt($platform->secret);
 
         return $platform;
     }
@@ -987,7 +1003,7 @@ EOD;
         if (isset($parameters['state'])) {
             $this->messageParameters['state'] = $parameters['state'];
         }
-        if (!empty(static::$browserStorageFrame)) {
+        if ($this->ok && !empty(static::$browserStorageFrame)) {
             if (strpos($parameters['redirect_uri'], '?') === false) {
                 $sep = '?';
             } else {
@@ -996,12 +1012,11 @@ EOD;
             $parameters['redirect_uri'] .= "{$sep}lti_storage_target=" . static::$browserStorageFrame;
         }
         if (isset($parameters['redirect_uri'])) {
-            $html = Util::sendForm($parameters['redirect_uri'], $this->messageParameters);
-            echo $html;
+            echo Util::sendForm($parameters['redirect_uri'], $this->messageParameters);
         } else {
             http_response_code(400);
         }
-        exit;
+        $this->doExit();
     }
 
 }

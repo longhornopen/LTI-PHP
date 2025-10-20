@@ -10,6 +10,7 @@ use Jose\Component\KeyManagement;
 use Jose\Component\Checker;
 use Jose\Component\Encryption;
 use Jose\Component\Encryption\JWE;
+use Symfony\Component\Clock\NativeClock;
 use ceLTIc\LTI\Util;
 use ceLTIc\LTI\Http\HttpMessage;
 
@@ -26,7 +27,7 @@ class WebTokenClient implements ClientInterface
     /**
      * Supported signature algorithms.
      */
-    public const SUPPORTED_ALGORITHMS = ['RS256', 'RS384', 'RS512'];
+    public const SUPPORTED_ALGORITHMS = ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'];
 
     /**
      * Signed JSON web token.
@@ -295,20 +296,34 @@ class WebTokenClient implements ClientInterface
         $hasPublicKey = !empty($publicKey);
         $retry = false;
         $leeway = Jwt::$leeway;
+        if (class_exists('Jose\Component\Checker\InternalClock')) {
+            $clock = new Checker\InternalClock();
+            $issuedAtChecker = new Checker\IssuedAtChecker($leeway, false, $clock);
+            $notBeforeChecker = new Checker\NotBeforeChecker($leeway, false, $clock);
+            $expirationTimeChecker = new Checker\ExpirationTimeChecker($leeway, false, $clock);
+        } else {
+            $clock = new NativeClock();
+            $issuedAtChecker = new Checker\IssuedAtChecker($clock, $leeway);
+            $notBeforeChecker = new Checker\NotBeforeChecker($clock, $leeway);
+            $expirationTimeChecker = new Checker\ExpirationTimeChecker($clock, $leeway);
+        }
         do {
             try {
                 $claimCheckerManager = new Checker\ClaimCheckerManager(
                     [
-                    new Checker\IssuedAtChecker($leeway),
-                    new Checker\NotBeforeChecker($leeway),
-                    new Checker\ExpirationTimeChecker($leeway)
+                    $issuedAtChecker,
+                    $notBeforeChecker,
+                    $expirationTimeChecker
                     ]
                 );
                 $claimCheckerManager->check(Util::jsonDecode($this->jwt->getPayload(), true));
                 $algorithmManager = new Core\AlgorithmManager([
                     new Signature\Algorithm\RS256(),
                     new Signature\Algorithm\RS384(),
-                    new Signature\Algorithm\RS512()
+                    new Signature\Algorithm\RS512(),
+                    new Signature\Algorithm\ES256(),
+                    new Signature\Algorithm\ES384(),
+                    new Signature\Algorithm\ES512()
                 ]);
                 $jwsVerifier = new Signature\JWSVerifier(
                     $algorithmManager
@@ -317,6 +332,9 @@ class WebTokenClient implements ClientInterface
                     case 'RS256':
                     case 'RS384':
                     case 'RS512':
+                    case 'ES256':
+                    case 'ES384':
+                    case 'ES512':
                         if ($this->hasHeader('kid') && ((Jwt::$allowJkuHeader && $this->hasHeader('jku')) || (!empty($jku) && empty($publicKey)))) {
                             if (Jwt::$allowJkuHeader && $this->hasHeader('jku')) {
                                 $jwksUrl = $this->getHeader('jku');
@@ -341,10 +359,12 @@ class WebTokenClient implements ClientInterface
                         }
                         break;
                 }
-            } catch (\Exception $e) {
-                Util::logError($e->getMessage());
-            } catch (\TypeError $e) {
-                Util::logError($e->getMessage());
+            } catch (\Exception | \TypeError $e) {
+                if (!$retry && $hasPublicKey && !empty($jku)) {
+                    Util::logError($e->getMessage() . ' [will retry]');
+                } else {
+                    Util::logError($e->getMessage());
+                }
             }
             if (!$ok) {
                 if ($retry) {
@@ -378,6 +398,9 @@ class WebTokenClient implements ClientInterface
         ?string $jku = null, ?string $encryptionMethod = null, ?string $publicKey = null): string
     {
         $sig = match ($signatureMethod) {
+            'ES512' => new Signature\Algorithm\ES512(),
+            'ES384' => new Signature\Algorithm\ES384(),
+            'ES256' => new Signature\Algorithm\ES256(),
             'RS512' => new Signature\Algorithm\RS512(),
             'RS384' => new Signature\Algorithm\RS384(),
             default => null
@@ -398,7 +421,10 @@ class WebTokenClient implements ClientInterface
             [
             new Signature\Algorithm\RS256(),
             new Signature\Algorithm\RS384(),
-            new Signature\Algorithm\RS512()
+            new Signature\Algorithm\RS512(),
+            new Signature\Algorithm\ES256(),
+            new Signature\Algorithm\ES384(),
+            new Signature\Algorithm\ES512()
             ]
         );
         $jwsBuilder = new Signature\JWSBuilder($algorithmManager);
@@ -485,11 +511,17 @@ class WebTokenClient implements ClientInterface
             $additionalValues['kid'] = $kid;
         }
         try {
-            $jwk = KeyManagement\JWKFactory::createFromKey($pemKey, null, $additionalValues);
-            $jwk = $jwk->toPublic();
-            $rsa = KeyManagement\KeyConverter\RSAKey::createFromJWK($jwk);
-            $rsa = $rsa::toPublic($rsa);
-            $keys['keys'][] = $rsa->toArray();
+            if (str_starts_with($signatureMethod, 'RS')) {
+                $jwk = KeyManagement\JWKFactory::createFromKey($pemKey, null, $additionalValues);
+                $jwk = $jwk->toPublic();
+                $rsa = KeyManagement\KeyConverter\RSAKey::createFromJWK($jwk);
+                $key = $rsa::toPublic($rsa);
+                $keys['keys'][] = $key->toArray();
+            } else {
+                $jwk = KeyManagement\KeyConverter\ECKey::createFromPEM($pemKey);
+                $key = $jwk::toPublic($jwk);
+                $keys['keys'][] = array_merge($additionalValues, $key->toArray());
+            }
         } catch (\Exception $e) {
 
         }

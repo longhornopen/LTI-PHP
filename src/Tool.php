@@ -410,7 +410,12 @@ class Tool
      */
     public function save(): bool
     {
-        return $this->dataConnector->saveTool($this);
+        $secret = $this->secret;
+        $this->secret = Util::encrypt($secret, DataConnector::$maximumSecretLength);
+        $ok = $this->dataConnector->saveTool($this);
+        $this->secret = $secret;
+
+        return $ok;
     }
 
     /**
@@ -531,16 +536,17 @@ class Tool
      *
      * @param string $name              Name of parameter to be checked
      * @param bool $required            True if parameter is required (optional, default is true)
-     * @param int|null $maxLength       Maximum permitted length of parameter value (optional, default is null)
+     * @param int|null $maximumLength   Maximum permitted length of parameter value (optional, default is null)
      * @param array|null $messageTypes  Array of message types to which the constraint applies (optional, default is all)
      */
-    public function setParameterConstraint(string $name, bool $required = true, ?int $maxLength = null, ?array $messageTypes = null): void
+    public function setParameterConstraint(string $name, bool $required = true, ?int $maximumLength = null,
+        ?array $messageTypes = null): void
     {
         $name = trim($name);
         if (!empty($name)) {
             $this->constraints[$name] = [
                 'required' => $required,
-                'max_length' => $maxLength,
+                'max_length' => $maximumLength,
                 'messages' => $messageTypes
             ];
         }
@@ -553,7 +559,12 @@ class Tool
      */
     public function getPlatforms(): array
     {
-        return $this->dataConnector->getPlatforms();
+        $platforms = $this->dataConnector->getPlatforms();
+        foreach ($platforms as $platform) {
+            $platform->secret = Util::decrypt($platform->secret);
+        }
+
+        return $platforms;
     }
 
     /**
@@ -770,7 +781,7 @@ class Tool
             $this->rawParameters['_storage_check'] = '';
             $javascript = $this->getStorageJS('lti.get_data', $state, '');
             echo Util::sendForm($_SERVER['REQUEST_URI'], $this->rawParameters, '', $javascript);
-            exit;
+            $this->doExit();
         } elseif (isset($this->rawParameters['_storage_check'])) {
             if (!empty(($this->rawParameters['_storage_check']))) {
                 $state = $parts[0];
@@ -1175,9 +1186,9 @@ EOD;
     {
         $tool = new static($dataConnector);
         $tool->key = $key;
-        if (!empty($dataConnector)) {
-            $ok = $dataConnector->loadTool($tool);
-            if ($ok && $autoEnable) {
+        if (!empty($dataConnector) && $dataConnector->loadTool($tool)) {
+            $tool->secret = Util::decrypt($tool->secret);
+            if ($autoEnable) {
                 $tool->enabled = true;
             }
         }
@@ -1199,7 +1210,8 @@ EOD;
     {
         $tool = new static($dataConnector);
         $tool->initiateLoginUrl = $initiateLoginUrl;
-        if ($dataConnector->loadTool($tool)) {
+        if (!empty($dataConnector) && $dataConnector->loadTool($tool)) {
+            $tool->secret = Util::decrypt($tool->secret);
             if ($autoEnable) {
                 $tool->enabled = true;
             }
@@ -1221,6 +1233,7 @@ EOD;
         $tool = new static($dataConnector);
         $tool->setRecordId($id);
         $dataConnector->loadTool($tool);
+        $tool->secret = Util::decrypt($tool->secret);
 
         return $tool;
     }
@@ -1262,26 +1275,20 @@ EOD;
                     if (empty($this->ltiVersion)) {
                         $this->ltiVersion = LtiVersion::V1;
                     }
-                    $page = $this->sendMessage($errorUrl, 'ContentItemSelection', $formParams);
-                    echo $page;
-                    exit;
+                    echo $this->sendMessage($errorUrl, 'ContentItemSelection', $formParams);
                 } else {
-                    if (strpos($errorUrl, '?') === false) {
-                        $errorUrl .= '?';
-                    } else {
-                        $errorUrl .= '&';
-                    }
+                    $params = [];
                     if ($this->debugMode && !is_null($this->reason)) {
-                        $errorUrl .= 'lti_errormsg=' . Util::urlEncode("Debug error: {$this->reason}");
+                        $params['lti_errormsg'] = "Debug error: {$this->reason}";
                     } else {
-                        $errorUrl .= 'lti_errormsg=' . Util::urlEncode($this->message);
+                        $params['lti_errormsg'] = $this->message;
                         if (!is_null($this->reason)) {
-                            $errorUrl .= '&lti_errorlog=' . Util::urlEncode("Debug error: {$this->reason}");
+                            $params['lti_errorlog'] = "Debug error: {$this->reason}";
                         }
                     }
-                    header("Location: {$errorUrl}");
+                    Util::redirect($errorUrl, $params);
                 }
-                exit;
+                $this->doExit();
             } else {
                 if (!is_null($this->errorOutput)) {
                     echo $this->errorOutput;
@@ -1290,14 +1297,14 @@ EOD;
                 } else {
                     echo "Error: {$this->message}";
                 }
-                exit;
+                $this->doExit();
             }
         } elseif (!is_null($this->redirectUrl)) {
-            header("Location: {$this->redirectUrl}");
-            exit;
+            Util::redirect($this->redirectUrl);
+            $this->doExit();
         } elseif (!is_null($this->output)) {
             echo $this->output;
-            exit;
+            $this->doExit();
         }
     }
 
@@ -2231,7 +2238,7 @@ EOD;
                 if (!Tool::$authenticateUsingGet) {
                     $this->output = Util::sendForm($this->platform->authenticationUrl, $params, '', $javascript);
                 } else {
-                    Util::redirect($this->platform->authenticationUrl, $params, '', $javascript);
+                    $this->redirectUrl = Util::addQueryParameters($this->platform->authenticationUrl, $params);
                 }
             } else {
                 $this->setReason('Unable to generate a state value');

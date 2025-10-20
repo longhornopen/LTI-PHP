@@ -69,6 +69,13 @@ class DataConnector
     public const TOOL_TABLE_NAME = 'lti2_tool';
 
     /**
+     * Maximum length for a platform/tool shared secret field (default = 1024).
+     *
+     * @var int $maximumSecretLength
+     */
+    public static int $maximumSecretLength = 1024;
+
+    /**
      * Database connection.
      *
      * @var object|resource $db
@@ -83,14 +90,14 @@ class DataConnector
     protected string $dbTableNamePrefix = '';
 
     /**
-     * SQL date format (default = 'Y-m-d')
+     * SQL date format (default = 'Y-m-d').
      *
      * @var string $dateFormat
      */
     protected string $dateFormat = 'Y-m-d';
 
     /**
-     * SQL time format (default = 'H:i:s')
+     * SQL time format (default = 'H:i:s').
      *
      * @var string $timeFormat
      */

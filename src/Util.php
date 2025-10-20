@@ -194,6 +194,18 @@ final class Util
     public static int $formSubmissionTimeout = 2;
 
     /**
+     * Key to use when encrypting and decrypting values.
+     *
+     * @var string|null $encryptionKey
+     */
+    public static ?string $encryptionKey = null;
+
+    /**
+     * The cryptography algorithm used by the encryption/decryption methods.
+     */
+    private const CIPHER_METHOD = 'aes-256-gcm';
+
+    /**
      * The client used to handle log messages.
      *
      * @var LoggerInterface $loggerClient
@@ -594,24 +606,26 @@ EOD;
      * @param int $statusCode        Status code of response (default is 200)
      * @param string $statusMessage  Status message of response (default is 'OK')
      *
-     * @return never
+     * @return void
      */
     public static function sendResponse(string $body = '', string $contentType = '', int $statusCode = 200,
-        string $statusMessage = 'OK'): never
+        string $statusMessage = 'OK'): void
     {
         $status = strval($statusCode);
         $response = "{$_SERVER['SERVER_PROTOCOL']} {$status} {$statusMessage}";
         header($response);
         $response .= "\nDate: " . gmdate(DATE_RFC2822);
         $response .= "\nServer: " . $_SERVER['SERVER_SOFTWARE'];
+        if (!empty($body)) {
+            if (!empty($contentType)) {
+                header("Content-Type: {$contentType}");
+            }
+            header("Content-Length: " . strval(strlen($body)));
+        }
         foreach (headers_list() as $header) {
             $response .= "\n{$header}";
         }
         if (!empty($body)) {
-            if (!empty($contentType)) {
-                $response .= "\nContent-Type: {$contentType}";
-            }
-            $response .= "\nContent-Length: " . strval(strlen($body));
             $response .= "\n\n";
             if (!preg_match('/[^\s\x20-\x7e]/', $body)) {
                 $response .= $body;
@@ -621,44 +635,60 @@ EOD;
             echo $body;
         }
         self::logDebug('Response sent: ' . $response);
-        exit;
+    }
+
+    /**
+     * Add query parameters to a URL.
+     *
+     * @param string $url    URL to which the form should be submitted
+     * @param array $params  Array of form parameters
+     *
+     * @return string
+     */
+    public static function addQueryParameters(string $url, array $params): string
+    {
+        if (strpos($url, '?') === false) {
+            $url .= '?';
+            $sep = '';
+        } else {
+            $sep = '&';
+        }
+        foreach ($params as $key => $value) {
+            $key = self::urlEncode($key);
+            if (!is_array($value)) {
+                $value = self::urlEncode($value);
+                $url .= "{$sep}{$key}={$value}";
+                $sep = '&';
+            } else {
+                foreach ($value as $element) {
+                    $element = self::urlEncode($element);
+                    $url .= "{$sep}{$key}={$element}";
+                    $sep = '&';
+                }
+            }
+        }
+
+        return $url;
     }
 
     /**
      * Redirect to a URL with query parameters.
      *
-     * @param string $url    URL to which the form should be submitted
-     * @param array $params  Array of form parameters
+     * @param string $url        URL to which the form should be submitted
+     * @param array $params      Array of form parameters (optional, default is none)
+     * @param bool $disableExit  True if the exit statement should not be called
      *
-     * @return never
+     * @return void
      */
-    public static function redirect(string $url, array $params): never
+    public static function redirect(string $url, array $params = [], bool $disableExit = false): void
     {
         if (!empty($params)) {
-            if (strpos($url, '?') === false) {
-                $url .= '?';
-                $sep = '';
-            } else {
-                $sep = '&';
-            }
-            foreach ($params as $key => $value) {
-                $key = self::urlEncode($key);
-                if (!is_array($value)) {
-                    $value = self::urlEncode($value);
-                    $url .= "{$sep}{$key}={$value}";
-                    $sep = '&';
-                } else {
-                    foreach ($value as $element) {
-                        $element = self::urlEncode($element);
-                        $url .= "{$sep}{$key}={$element}";
-                        $sep = '&';
-                    }
-                }
-            }
+            $url = Util::addQueryParameters($url, $params);
         }
-
         header("Location: {$url}");
-        exit;
+        if (!$disableExit) {
+            exit;
+        }
     }
 
     /**
@@ -871,16 +901,18 @@ EOD;
     /**
      * Get the named array element from object.
      *
-     * @param object $obj       Object containing the element
-     * @param string $fullname  Name of element
-     * @param bool $required    True if the element must be present
-     * @param bool $notEmpty    True if the element must not have an empty value
+     * @param object $obj          Object containing the element
+     * @param string $fullname     Name of element
+     * @param bool $required       True if the element must be present
+     * @param bool $notEmpty       True if the element must not have an empty value
+     * @param array|null $default  Value to return when a conversion is not possible (optional, default is an empty array)
      *
-     * @return array  Value of element (or empty string if not found)
+     * @return array|null  Value of element (or default value if not found)
      */
-    public static function checkArray(object $obj, string $fullname, bool $required = false, bool $notEmpty = false): array
+    public static function checkArray(object $obj, string $fullname, bool $required = false, bool $notEmpty = false,
+        ?array $default = []): ?array
     {
-        $arr = [];
+        $arr = $default;
         $name = $fullname;
         $pos = strrpos($name, '/');
         if ($pos !== false) {
@@ -1188,6 +1220,69 @@ EOD;
         }
 
         return $clone;
+    }
+
+    /**
+     * Check whether the application instance supports the encryption/decryption methods.
+     *
+     * @return bool  True if encryption is supported by this application instance
+     */
+    public static function canEncrypt(): bool
+    {
+        return !empty(self::$encryptionKey) && function_exists('openssl_encrypt') &&
+            in_array(self::CIPHER_METHOD, openssl_get_cipher_methods());
+    }
+
+    /**
+     * Encrypt a string value.
+     *
+     * @param string|null $value  String to be encrypted
+     * @param int $maximumLength  Maximum length allowed for encrypted string (optional, default is 0 for no restriction)
+     *
+     * @return string|null  Encrypted string, or the original value if encryption was not possible
+     */
+    public static function encrypt(?string $value, int $maximumLength = 0): ?string
+    {
+        if (!empty($value) && self::canEncrypt()) {
+            $ivLength = openssl_cipher_iv_length(self::CIPHER_METHOD);
+            $iv = openssl_random_pseudo_bytes($ivLength);
+            $encryptedValue = openssl_encrypt($value, self::CIPHER_METHOD, self::$encryptionKey, 0, $iv, $tag);
+            if ($encryptedValue !== false) {
+                $encryptedValue = base64_encode($iv) . ':' . base64_encode($tag) . ':' . $encryptedValue;
+                if (($maximumLength <= 0) || (strlen($encryptedValue) <= $maximumLength)) {
+                    $value = $encryptedValue;
+                }
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Decrypt an encrypted string value.
+     *
+     * @param string|null $value   String to be decrypted
+     *
+     * @return string|null  Decrypted string, or the unchanged value if decryption was not possible
+     */
+    public static function decrypt(?string $value): ?string
+    {
+        if (!empty($value) && self::canEncrypt()) {
+            $parts = explode(':', $value, 3);
+            if (count($parts) === 3) {
+                $iv = base64_decode($parts[0], true);
+                $tag = base64_decode($parts[1], true);
+                $encryptedValue = $parts[2];
+                if (!empty($iv) && !empty($tag) && !empty($encryptedValue)) {
+                    $decryptedValue = openssl_decrypt($encryptedValue, self::CIPHER_METHOD, self::$encryptionKey, 0, $iv, $tag);
+                    if ($decryptedValue !== false) {
+                        $value = $decryptedValue;
+                    }
+                }
+            }
+        }
+
+        return $value;
     }
 
 }

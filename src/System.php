@@ -75,7 +75,7 @@ trait System
     public ?DataConnector $dataConnector = null;
 
     /**
-     * RSA key in PEM or JSON format.
+     * RSA/EC key in PEM or JSON format.
      *
      * Set to the private key for signing outgoing messages and service requests, and to the public key
      * for verifying incoming messages and service requests.
@@ -183,6 +183,13 @@ trait System
      * @var IdScope|null $idScope
      */
     public ?IdScope $idScope = IdScope::IdOnly;
+
+    /**
+     * Class of exception to be thrown instead of calling exit.
+     *
+     * @var string|null $onExitExceptionClass
+     */
+    public ?string $onExitExceptionClass = null;
 
     /**
      * JWT ClientInterface object.
@@ -1066,7 +1073,7 @@ trait System
      */
     public function useOAuth1(): bool
     {
-        return empty($this->signatureMethod) || !str_starts_with($this->signatureMethod, 'RS');
+        return empty($this->signatureMethod) || str_starts_with($this->signatureMethod, 'HMAC');
     }
 
     /**
@@ -1417,7 +1424,7 @@ trait System
                                             Util::setTestCookie();
                                             $_POST['_new_window'] = '';
                                             echo Util::sendForm($_SERVER['REQUEST_URI'], $_POST, '_blank');
-                                            exit;
+                                            $this->doExit();
                                         }
                                         Util::setTestCookie(true);
                                     }
@@ -1489,7 +1496,7 @@ trait System
                             Util::setTestCookie();
                             $_POST['_new_window'] = '';
                             echo Util::sendForm($_SERVER['REQUEST_URI'], $_POST, '_blank');
-                            exit;
+                            $this->doExit();
                         } elseif (!empty(session_id()) && (count($parts) > 1) && (session_id() !== $parts[1])) {  // Reset to original session
                             session_abort();
                             session_id($parts[1]);
@@ -1866,6 +1873,23 @@ trait System
             }
             return $params;
         }
+    }
+
+    /**
+     * Call exit or throw an exception.
+     *
+     * @return never
+     */
+    private function doExit(): never
+    {
+        if (!empty($this->onExitExceptionClass)) {
+            try {
+                throw new $this->onExitExceptionClass();
+            } catch (\Error $e) {
+                Util::logError('Unable to throw exception: ' . $e->getMessage());
+            }
+        }
+        exit;
     }
 
     /**
