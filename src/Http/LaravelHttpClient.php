@@ -16,7 +16,7 @@ class LaravelHttpClient implements ClientInterface
     /**
      * Timeout in seconds for outbound requests.
      */
-    private const TIMEOUT = 30;
+    private const CONNECT_TIMEOUT = 30;
 
     /**
      * Send the request to the target URL.
@@ -39,7 +39,7 @@ class LaravelHttpClient implements ClientInterface
 
         $headerAssoc = $this->convertHeadersToAssoc($headers);
 
-        $pendingRequest = Http::timeout(self::TIMEOUT)->withHeaders($headerAssoc);
+        $pendingRequest = Http::connectTimeout(self::CONNECT_TIMEOUT)->withHeaders($headerAssoc);
 
         $options = [];
         if (($message->getMethod() !== 'GET') && !is_null($message->request)) {
