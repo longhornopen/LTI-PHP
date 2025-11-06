@@ -166,14 +166,7 @@ class HttpMessage
     public static function getHttpClient(): ?ClientInterface
     {
         if (empty(self::$httpClient)) {
-            if (function_exists('curl_init')) {
-                self::$httpClient = new CurlClient();
-            } elseif (ini_get('allow_url_fopen')) {
-                self::$httpClient = new StreamClient();
-            }
-            if (self::$httpClient) {
-                Util::logDebug('HttpClient set to \'' . get_class(self::$httpClient) . '\'');
-            }
+            self::$httpClient = new LaravelHttpClient();
         }
 
         return self::$httpClient;
