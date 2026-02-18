@@ -984,7 +984,7 @@ class Tool
         ];
         $toolConfig['scope'] = implode(' ', array_intersect($this->requiredScopes, $scopesSupported));
         if (!empty($iconUrl)) {
-            if ((strpos($iconUrl, '://') === false) && !empty($this->baseUrl)) {
+            if ((!str_contains($iconUrl, '://')) && !empty($this->baseUrl)) {
                 $iconUrl = "{$this->baseUrl}{$iconUrl}";
             }
             $toolConfig['logo_uri'] = $iconUrl;
@@ -1648,7 +1648,7 @@ EOD;
             }
             if ($this->ok) {
                 $url = $this->messageParameters['tc_profile_url'];
-                if (strpos($url, '?') === false) {
+                if (!str_contains($url, '?')) {
                     $url .= '?';
                 } else {
                     $url .= '&';
@@ -1726,7 +1726,7 @@ EOD;
             }
         } elseif ($this->ok && !empty($this->messageParameters['custom_tc_profile_url']) && empty($this->platform->profile)) {
             $url = $this->messageParameters['custom_tc_profile_url'];
-            if (strpos($url, '?') === false) {
+            if (!str_contains($url, '?')) {
                 $url .= '?';
             } else {
                 $url .= '&';
