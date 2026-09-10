@@ -269,7 +269,7 @@ class LineItem extends AssignmentGrade
     private function toLineItem(Platform $platform, object $json): ?LTI\LineItem
     {
         $id = Util::checkString($json, 'id', true, true);
-        $scoreMaximum = Util::checkNumber($json, 'scoreMaximum', true, 0, true);
+        $scoreMaximum = Util::checkNumber($json, 'scoreMaximum', true, 0, false);
         $label = Util::checkString($json, 'label', true, true);
         $resourceId = Util::checkString($json, 'resourceId');
         $tag = Util::checkString($json, 'tag');
